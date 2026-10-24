@@ -23,8 +23,10 @@ function signingUrl(path, params) {
   return decodeURIComponent(requestUrl(path, params));
 }
 
-function operationName(path) {
+function operationName(path, method = '') {
   const pathname = path.split('?')[0];
+  if (String(method).toUpperCase() === 'POST'
+    && /^\/v1\.0\/(?:iot-03\/)?devices\/[^/]+\/commands$/.test(pathname)) return 'device command';
   if (pathname === '/v1.0/iot-01/associated-users/actions/authorized-login'
     || pathname === '/v1.0/iot-03/users/login') return 'account login';
   if (/^\/v1\.0\/token(?:\/|$)/.test(pathname)) return 'access token refresh';

@@ -177,6 +177,10 @@ npx homebridge -D -U /path/to/local/homebridge-storage -P .
 
 分享日志前，请遮蔽账号、密码、Access Secret、token 以及设备标识。提交问题时提供插件、Homebridge、Node.js 的版本和相关错误日志。
 
+### 发布更新说明
+
+在 `CHANGELOG.md` 中添加与 `package.json` 版本一致的中英文条目，提交后推送对应的稳定版本标签，例如 `v2.6.1`。Release 工作流会运行测试并创建对应的 GitHub Release。Homebridge 插件管理通过 Release 正文显示 **What's New / 更新说明**，通过对应标签内的更新日志显示 Changelog。npm 包需要单独发布。
+
 ### 常见 Tuya Open API 错误
 
 | 错误码 | 含义 | 排查方向 |

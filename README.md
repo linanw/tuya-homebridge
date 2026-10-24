@@ -163,6 +163,10 @@ The controller and Homebridge must be on the same local network with working IPv
 
 Unsupported services remain available through HomeKit. This includes heaters/HVAC, air purifiers, garage doors, stateless wireless buttons, and gas alarms. In particular, gas alarms represented by the existing driver as HomeKit leak sensors are not advertised as Matter water-leak detectors. Availability and presentation of supported device types also depend on the Matter controller.
 
+### Publish release notes
+
+Add an English and Chinese entry to `CHANGELOG.md` matching `package.json`, commit the changes, and push the matching stable tag, such as `v2.6.1`. The release workflow runs the tests and publishes the corresponding GitHub Release. Homebridge UI reads that release body for **What's New / Notes** and the tagged changelog for its changelog view. npm publication is a separate step.
+
 ## Tuya OpenApi Login Error Code
 
 | Error code | Error message | Troubleshooting |

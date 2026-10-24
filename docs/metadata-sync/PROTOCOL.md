@@ -1,6 +1,10 @@
 # Metadata Sync v1 (implementation contract)
 
-This contract is implemented by plugin **2.7.0-beta.1**, published through npm's separate `beta` channel; stable `latest` remains **2.6.2**. Release availability is determined by the registry and matching GitHub pre-release. Native Matter continues to control devices; the authenticated metadata service is a separate integration for the Mac HomeKit companion and compatible Matter controllers. It does not obtain Apple/Google private home information through Matter. See [installation and single-device testing](SETUP.md).
+This contract is implemented by plugin **2.7.0-beta.2**, published through npm's separate `beta` channel; stable `latest` remains **2.6.2**. Release availability is determined by the registry and matching GitHub pre-release. Native Matter continues to control devices; the authenticated metadata service is a separate integration for the Mac HomeKit companion and compatible Matter controllers. It does not obtain Apple/Google private home information through Matter. See [installation and single-device testing](SETUP.md).
+
+Beta.2 corrects the underlying Tuya query signing: query-key sorting, RFC 3986 transport encoding and one canonical-URL decode, including comma-separated batch `device_ids`. The `1004 sign invalid` defect also exists in 2.6.2 and is independent of this metadata protocol. Metadata Sync stays at schema version 1; MatterDesk 0.7.0-beta.1 and MatterCamViewer 2.5.0-beta.1 remain compatible. See [upgrade and safe operation diagnostics](SETUP.md).
+
+beta.2 修复底层涂鸦 query 签名的键排序、RFC 3986 传输编码及 canonical URL 一次解码，包含逗号分隔批量 `device_ids` 的 `1004 sign invalid` 问题。此缺陷在 2.6.2 中也已存在，与元数据协议无关。协议仍为 schema version 1，桌面端维持 MatterDesk 0.7.0-beta.1 与 MatterCamViewer 2.5.0-beta.1。遇到 `1004` 先按[升级与安全 operation 诊断](SETUP.md)处理，保留原凭据与存储。
 
 ## Transport
 

@@ -1,8 +1,8 @@
 # Metadata sync beta / 元数据同步 beta
 
-This guide targets plugin **2.7.0-beta.1**, MatterDesk **0.7.0-beta.1** and MatterCamViewer **2.5.0-beta.1**. The beta uses npm's `beta` dist-tag; `latest` remains **2.6.2**. GitHub test packages are being prepared: use the matching pre-release only after its expected files and checksums appear. A stable 2.6.2 installation does not include this metadata service.
+This guide targets plugin **2.7.0-beta.2**, MatterDesk **0.7.0-beta.1** and MatterCamViewer **2.5.0-beta.1**. The plugin beta uses npm's `beta` dist-tag; `latest` remains **2.6.2**. Both desktop Linux AppImages and their SHA-256 files are published on the linked beta.1 pre-release pages. Their versions remain unchanged by the plugin's beta.2 signing fix. A stable 2.6.2 installation does not include this metadata service.
 
-本指南对应插件 **2.7.0-beta.1**、MatterDesk **0.7.0-beta.1** 与 MatterCamViewer **2.5.0-beta.1**。beta 使用独立测试通道，正式版 `latest` 仍为 **2.6.2**。桌面测试包正在准备；以对应预发布页的实际附件和校验文件为准，不要将旧正式包当作本轮 beta。
+本指南对应插件 **2.7.0-beta.2**、MatterDesk **0.7.0-beta.1** 与 MatterCamViewer **2.5.0-beta.1**。插件 beta 使用独立测试通道，正式版 `latest` 仍为 **2.6.2**。两个桌面 Linux AppImage 及 SHA-256 校验文件已发布在下方 beta.1 预发布页，本次插件 beta.2 签名修复不改变桌面版本。
 
 Native Matter still provides device control. This authenticated service supplies names and rooms to separately authorized clients; Matter pairing alone does not grant Apple Home or Google Home private room/alias access.
 
@@ -10,17 +10,27 @@ Native Matter still provides device control. This authenticated service supplies
 
 ## 1. Install the plugin / 安装插件
 
-In Homebridge UI, open the plugin card's **⋮ → Manage Versions / 管理版本 → beta / 2.7.0-beta.1**. Alternatively, run this in the same Node/npm environment or container as the Homebridge service:
+In Homebridge UI, open the plugin card's **⋮ → Manage Versions / 管理版本 → beta / 2.7.0-beta.2**. Alternatively, run this in the same Node/npm environment or container as the Homebridge service:
 
 ```sh
 npm install -g @linanw/homebridge-tuya-platform@beta
 # Exact version for repeatable testing / 固定本轮版本：
-npm install -g @linanw/homebridge-tuya-platform@2.7.0-beta.1
+npm install -g @linanw/homebridge-tuya-platform@2.7.0-beta.2
 ```
 
 Keep your existing Tuya account settings, Homebridge storage, child bridge identity and Matter pairings. Restart the existing service after updating. Return to the stable channel with `npm install -g @linanw/homebridge-tuya-platform@latest`; do not delete storage or re-pair merely to change package versions.
 
 保留现有账号配置、Homebridge 存储、子桥身份及 Matter 配对，更新后重启现有服务。需要退回正式版时安装 `@latest`，不要清空缓存或重新配对。恢复 2.6.2 后元数据服务不可用，已有普通 HAP / Matter 控制继续按稳定版能力运行。
+
+### `1004 sign invalid`
+
+First upgrade the plugin to **2.7.0-beta.2** and restart the existing service, keeping your access credentials, storage and pairings. This beta sorts query keys, uses RFC 3986 transport encoding and decodes the canonical signing URL once, following the [official SDK](https://github.com/tuya/tuya-connector-nodejs/blob/master/src/core/client.ts). It fixes comma-separated batch `device_ids` signing; the defect also exists in stable 2.6.2 and is unrelated to enabling metadata sync. Offline regression tests cover sorting, encoding and batch IDs; live Tuya validation remains pending.
+
+If `1004` persists, provide the plugin, Homebridge and Node.js versions and sanitized error lines. The new static `operation` labels distinguish `account login`, `associated device list`, `batch device functions` and other steps without URLs or device IDs. Review logs and remove account/device identifiers, credentials, tokens, signed headers and authentication payloads before sharing. Do not reset keys, delete caches or re-pair devices as an initial workaround for this signing defect.
+
+先将插件升级至 **2.7.0-beta.2** 并重启现有服务，保留 access 凭据、存储与配对。本 beta 按[官方 SDK](https://github.com/tuya/tuya-connector-nodejs/blob/master/src/core/client.ts)规则对 query 键排序，以 RFC 3986 编码传输，对 canonical URL 解码一次，修复逗号分隔批量 `device_ids` 的签名不一致。该缺陷在稳定版 2.6.2 中也已存在，与开启元数据同步无关。离线回归覆盖排序、编码及批量 ID；真实涂鸦联调仍待验证。
+
+若 `1004` 持续，提供插件、Homebridge、Node.js 版本及脱敏错误行。新增的静态 `operation` 标签可区分 `account login`（登录）、`associated device list`（设备列表）、`batch device functions`（批量功能）等步骤，不包含 URL 或设备 ID。分享前检查并删除账号/设备标识、凭据、token、签名请求头及鉴权内容。不要先通过重置密钥、清空缓存或重新配对来绕过这个签名缺陷。
 
 ## 2. Start with read-only service access / 先开启只读服务
 
@@ -78,12 +88,12 @@ For a client on another computer, use normally trusted HTTPS. Direct TLS needs m
 
 - **MatterDesk:** use the `matterdesk-v0.7.0-beta.1` [pre-release](https://github.com/linanw/MatterDesk/releases/tag/matterdesk-v0.7.0-beta.1), then open **Settings → 涂鸦同步**.
 - **MatterCamViewer:** use the `mattercamviewer-v2.5.0-beta.1` [pre-release](https://github.com/linanw/MatterDesk/releases/tag/mattercamviewer-v2.5.0-beta.1), then use its independent **涂** entry. It remains a viewer for actual camera endpoints; this feature adds no Tuya camera driver.
-- **Mac HomeKit companion:** fetch and build the [companion at v2.7.0-beta.1](https://github.com/linanw/tuya-homebridge/blob/v2.7.0-beta.1/companions/mac/README.md). It needs valid signing, HomeKit entitlement and explicit user home access. No signed Mac installer is supplied here.
-- **Optional Node adapter:** fetch the [source at v2.7.0-beta.1](https://github.com/linanw/tuya-homebridge/blob/v2.7.0-beta.1/integrations/matterdesk/README.md). It is an integration library, not an OHF plugin or a desktop application.
+- **Mac HomeKit companion:** fetch and build the [companion at v2.7.0-beta.2](https://github.com/linanw/tuya-homebridge/blob/v2.7.0-beta.2/companions/mac/README.md). It needs valid signing, HomeKit entitlement and explicit user home access. No signed Mac installer is supplied here.
+- **Optional Node adapter:** fetch the [source at v2.7.0-beta.2](https://github.com/linanw/tuya-homebridge/blob/v2.7.0-beta.2/integrations/matterdesk/README.md). It is an integration library, not an OHF plugin or a desktop application.
 
-The npm package includes this guide, the service and the [protocol](PROTOCOL.md), but **does not include `companions/` or `integrations/`**. Their GitHub links are intentional. Desktop beta assets are usable only when actually listed on the linked pre-release; source tags are the alternative for building locally.
+The npm package includes this guide, the service and the [protocol](PROTOCOL.md), but **does not include `companions/` or `integrations/`**. Their GitHub links are intentional. Download each desktop AppImage with its matching `.AppImage.sha256` from the linked pre-release and verify it with `sha256sum -c <checksum-file>` before running it. Source tags remain available for local builds.
 
-npm 包包含服务、本指南和协议，**不包含 `companions/`、`integrations/`**，请通过上方 GitHub 链接获取对应源码。桌面测试包仅在预发布页实际列出附件后可下载；也可从相应标签构建。
+npm 包包含服务、本指南和协议，**不包含 `companions/`、`integrations/`**，请通过上方 GitHub 链接获取对应源码。桌面预发布页已提供 AppImage 及对应 `.AppImage.sha256`，下载后先执行 `sha256sum -c <校验文件名>`；也可从相应标签构建。
 
 1. Keep the existing OHF controller and Fabric directory for MatterDesk/MatterCamViewer. In the Mac app, authorize HomeKit and select one Apple home.
 2. Enter the metadata service URL and token. Check that the source is available and the latest authoritative observation is present. Select the explicit Tuya home, or the Custom device-name-only profile.

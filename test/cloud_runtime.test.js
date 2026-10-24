@@ -51,6 +51,29 @@ function mockAdapter(t, implementation) {
   t.after(() => { axios.defaults.adapter = previous; });
 }
 
+// Independent reference from Tuya's official Node/Python SDKs: sort query
+// names and sign decoded parameter values. The HTTP URL remains encoded.
+// Do not use the production signing helper or treat the wire URL as canonical.
+function officialCanonicalUrl(pathname, params = {}, existingQuery = '') {
+  const values = new Map(Object.entries(params || {})
+    .filter(([, value]) => value !== null && value !== undefined)
+    .map(([key, value]) => [key, String(value)]));
+  for (const [key, value] of new URLSearchParams(existingQuery)) values.set(key, value);
+  const query = [...values].sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0)
+    .map(([key, value]) => `${key}=${value}`).join('&');
+  return decodeURIComponent(pathname) + (query ? `?${query}` : '');
+}
+
+function officialSignature(method, canonicalUrl, bodyBytes, headers, accessToken) {
+  const header = name => typeof headers.get === 'function' ? headers.get(name) : headers[name.toLowerCase()];
+  const names = String(header('Signature-Headers') || '').split(':').filter(Boolean);
+  const signedHeaders = names.map(name => `${name}:${header(name)}\n`).join('');
+  const digest = crypto.createHash('sha256').update(bodyBytes).digest('hex');
+  const stringToSign = [method.toUpperCase(), digest, signedHeaders, canonicalUrl].join('\n');
+  const prefix = `${credentials.accessId}${accessToken}${header('t')}${header('nonce') || ''}`;
+  return crypto.createHmac('sha256', credentials.accessKey).update(prefix + stringToSign).digest('hex').toUpperCase();
+}
+
 function assertNoCredentials(value) {
   const output = JSON.stringify(value);
   for (const secret of [...Object.values(credentials),
@@ -212,27 +235,40 @@ test('Custom token refresh uses refresh_token once and does not clear another re
   assert.deepEqual(tokens, [credentials.accessToken, credentials.accessToken]);
 });
 
-test('both API clients sign exactly the query that Axios sends, including escaped values', async t => {
+test('both API clients sign the official sorted decoded canonical query, independently of the encoded wire URL', async t => {
   const { log } = logger();
   const requests = [];
+  const vectors = [
+    { name: 'lexical query order', params: { z: 'last', a: 'first' }, canonical: '/fixture?a=first&z=last' },
+    { name: 'batch device comma', params: { device_ids: 'one,two' }, canonical: '/fixture?device_ids=one,two' },
+    { name: 'space plus ampersand and Unicode', params: { query: 'a+b &茶', ids: 'one,two' }, canonical: '/fixture?ids=one,two&query=a+b &茶' },
+    { name: 'null and undefined omitted', params: { z: null, a: 0, b: false, missing: undefined }, canonical: '/fixture?a=0&b=false' },
+    { name: 'literal percent escape decoded only once', params: { value: '%2C', deeper: '%252C', plus: '%2B' }, canonical: '/fixture?deeper=%252C&plus=%2B&value=%2C' },
+    { name: 'encoded path query and separate params merge once', path: '/fixture?z=last&literal=%252C', params: { a: 'first' }, canonical: '/fixture?a=first&literal=%2C&z=last' },
+  ];
+  let vector;
   mockAdapter(t, async config => {
     requests.push(config);
     const actual = new URL(axios.getUri(config), config.baseURL);
-    assert.equal(actual.search, '?query=a%2Bb+%26%E8%8C%B6&ids=one%2Ctwo');
-    const body = typeof config.data === 'string' ? config.data : '';
-    const stringToSign = `${config.method.toUpperCase()}\n${CryptoJS.SHA256(body)}\nclient_id:${credentials.accessId}\n\n${actual.pathname}${actual.search}`;
-    const prefix = `${credentials.accessId}${credentials.accessToken}${config.headers.t}${config.headers.nonce}`;
-    const expected = CryptoJS.HmacSHA256(prefix + stringToSign, credentials.accessKey).toString().toUpperCase();
-    assert.equal(config.headers.sign, expected);
+    const intended = new URL(vector.path || '/fixture', 'https://oracle.invalid');
+    const canonical = officialCanonicalUrl(intended.pathname, vector.params, intended.search);
+    assert.equal(canonical, vector.canonical, vector.name);
+    assert.equal(officialCanonicalUrl(actual.pathname, {}, actual.search), vector.canonical,
+      `${vector.name}: transport must preserve the intended parameter values`);
+    assert.equal(config.headers.sign, officialSignature(config.method, canonical, Buffer.alloc(0), config.headers,
+      credentials.accessToken), vector.name);
+    assert.ok(!actual.search.includes('+'), 'spaces must use RFC3986 %20, not form-encoding plus');
     assert.match(config.headers.nonce, /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i);
     return respond(config, { success: true, result: { accepted: true } });
   });
   for (const api of [custom(log), paas(log)]) {
     api.tokenInfo = { ...tokenResult(), expire: Date.now() + 7200000 };
-    const response = await api.get('/fixture', { query: 'a+b &茶', ids: 'one,two', absent: null, unset: undefined });
-    assert.equal(response.result.accepted, true);
+    for (vector of vectors) {
+      const response = await api.get(vector.path || '/fixture', vector.params);
+      assert.equal(response.result.accepted, true);
+    }
   }
-  assert.equal(requests.length, 2);
+  assert.equal(requests.length, vectors.length * 2);
 });
 
 test('real HTTP requests preserve the signed URL and JSON body and sanitize an HTTP failure', { timeout: 5000 }, async t => {
@@ -260,14 +296,73 @@ test('real HTTP requests preserve the signed URL and JSON body and sanitize an H
     await api.request('post', '/fixture', { query: 'a+b &茶', ids: 'one,two', absent: null },
       { commands: [{ code: 'switch', value: true }] });
     const sent = received.at(-1);
-    assert.equal(sent.url, '/fixture?query=a%2Bb+%26%E8%8C%B6&ids=one%2Ctwo');
+    const target = new URL(sent.url, 'http://oracle.invalid');
+    const canonical = officialCanonicalUrl('/fixture', { query: 'a+b &茶', ids: 'one,two', absent: null });
+    assert.equal(canonical, '/fixture?ids=one,two&query=a+b &茶');
+    assert.equal(officialCanonicalUrl(target.pathname, {}, target.search), canonical);
+    assert.ok(!target.search.includes('+'));
     assert.deepEqual(JSON.parse(sent.body), { commands: [{ code: 'switch', value: true }] });
-    const signed = `${sent.method}\n${CryptoJS.SHA256(sent.body)}\nclient_id:${credentials.accessId}\n\n${sent.url}`;
-    const prefix = `${credentials.accessId}${credentials.accessToken}${sent.headers.t}${sent.headers.nonce}`;
-    assert.equal(sent.headers.sign, CryptoJS.HmacSHA256(prefix + signed, credentials.accessKey).toString().toUpperCase());
+    assert.equal(sent.headers['content-type'], 'application/json');
+    assert.equal(sent.headers.sign, officialSignature(sent.method, canonical, Buffer.from(sent.body), sent.headers,
+      credentials.accessToken));
     await assert.rejects(api.get('/failure'), /HTTP request failed \(status 503\)/);
   }
   assert.equal(received.length, 4);
+  assertNoCredentials(records);
+});
+
+test('real PaaS startup signs a two-device batch using the official canonical URL and reports only a safe failure stage', { timeout: 6000 }, async t => {
+  const ids = ['fixture-device-one', 'fixture-device-two'];
+  const stages = [];
+  const rejectedSignatures = [];
+  let rejectBatch = false;
+  let endpoint;
+  const loginPath = '/v1.0/iot-01/associated-users/actions/authorized-login';
+  const server = http.createServer((request, response) => {
+    const chunks = [];
+    request.on('data', chunk => chunks.push(chunk));
+    request.on('end', () => {
+      const actual = new URL(request.url, 'http://oracle.invalid');
+      const login = actual.pathname === loginPath;
+      const canonical = officialCanonicalUrl(actual.pathname, {}, actual.search);
+      const expected = officialSignature(request.method, canonical, Buffer.concat(chunks), request.headers,
+        login ? '' : credentials.accessToken);
+      const stage = login ? 'login' : actual.pathname.endsWith('/functions') ? 'batch functions' : 'device list';
+      stages.push(stage);
+      const valid = request.headers.sign === expected && request.headers.client_id === credentials.accessId &&
+        (request.headers.access_token || '') === (login ? '' : credentials.accessToken);
+      response.writeHead(200, { 'Content-Type': 'application/json' });
+      if (!valid || rejectBatch && stage === 'batch functions') {
+        if (!valid) rejectedSignatures.push(stage);
+        response.end(JSON.stringify({ success: false, code: 1004, msg: credentials.accessKey }));
+      } else if (login) {
+        response.end(JSON.stringify({ success: true, result: { ...tokenResult(), platform_url: endpoint } }));
+      } else if (actual.pathname === '/v1.0/iot-01/associated-users/devices' && actual.searchParams.get('size') === '100') {
+        response.end(JSON.stringify({ success: true, result: { devices: ids.map(id => ({ id, name: 'Fixture device', status: [] })) } }));
+      } else if (actual.pathname === '/v1.0/devices/functions' && actual.searchParams.get('device_ids') === ids.join(',')) {
+        response.end(JSON.stringify({ success: true, result: ids.map(id => ({ devices: [id], functions: [] })) }));
+      } else response.end(JSON.stringify({ success: false, code: 1106 }));
+    });
+  });
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  endpoint = `http://127.0.0.1:${server.address().port}`;
+  t.after(() => new Promise(resolve => { server.closeAllConnections(); server.close(resolve); }));
+  const proxy = axios.defaults.proxy; axios.defaults.proxy = false;
+  t.after(() => { axios.defaults.proxy = proxy; });
+  const { log, records } = logger();
+  const api = paas(log); api.endpoint = endpoint;
+  const devices = await api.getDevices();
+  assert.deepEqual(devices.map(device => device.id), ids);
+  assert.deepEqual(stages, ['login', 'device list', 'batch functions']);
+  assert.deepEqual(rejectedSignatures, []);
+  rejectBatch = true;
+  await assert.rejects(api.getDevices(), error => {
+    assert.match(error.message, /\(code 1004\)/);
+    assert.match(error.message, /operation: batch device functions/);
+    assertNoCredentials(error.message);
+    for (const id of ids) assert.ok(!error.message.includes(id));
+    return true;
+  });
   assertNoCredentials(records);
 });
 

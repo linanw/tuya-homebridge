@@ -1,15 +1,18 @@
 #!/usr/bin/env python3
 """Loopback-only XCTest fixture. It never logs bodies or authorization values."""
 
+import sys
+print("fixture startup: importing standard library", file=sys.stderr, flush=True)
 import copy
 import json
-import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from socketserver import TCPServer
 from urllib.parse import urlsplit
 
 
 TOKEN = "SYNTHETIC-XCTEST-SESSION-TOKEN-0123456789"
+print("fixture startup: reading canonical snapshot", file=sys.stderr, flush=True)
 with open(sys.argv[2], encoding="utf-8") as file:
     snapshot = json.load(file)
 snapshot.update(sourceKind="tuya-project-custom", roomsAvailable=False, homes=[], rooms=[])
@@ -146,7 +149,18 @@ class Handler(BaseHTTPRequestHandler):
                             "status": "queued", "code": None, "snapshot": None})
 
 
-server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+class LoopbackServer(ThreadingHTTPServer):
+    def server_bind(self):
+        # HTTPServer normally performs reverse DNS during bind. This numeric
+        # loopback fixture must not depend on the hosted runner's DNS resolver.
+        TCPServer.server_bind(self)
+        self.server_name = "localhost"
+        self.server_port = self.server_address[1]
+
+
+print("fixture startup: binding numeric loopback", file=sys.stderr, flush=True)
+server = LoopbackServer(("127.0.0.1", 0), Handler)
 server.daemon_threads = True
 Path(sys.argv[1]).write_text(json.dumps({"port": server.server_port}), encoding="utf-8")
+print("fixture startup: ready", file=sys.stderr, flush=True)
 server.serve_forever(poll_interval=0.1)

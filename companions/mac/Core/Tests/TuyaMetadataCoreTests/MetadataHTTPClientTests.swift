@@ -10,6 +10,10 @@ import Glibc
 import XCTest
 @testable import TuyaMetadataCore
 
+private struct FixtureStartupError: Error, CustomStringConvertible {
+    let description: String
+}
+
 private final class LoopbackMetadataFixture {
     static let token = "SYNTHETIC-XCTEST-SESSION-TOKEN-0123456789"
     let process: Process
@@ -18,7 +22,8 @@ private final class LoopbackMetadataFixture {
 
     init() throws {
         let environmentPath = ProcessInfo.processInfo.environment["PATH"] ?? ""
-        let search = environmentPath.split(separator: ":").map(String.init) + ["/usr/bin", "/usr/local/bin", "/opt/homebrew/bin"]
+        // Prefer the native system interpreter over PATH shims/tool-cache launchers.
+        let search = ["/usr/bin", "/opt/homebrew/bin"] + environmentPath.split(separator: ":").map(String.init) + ["/usr/local/bin"]
         guard let python = search.map({ URL(fileURLWithPath: $0).appendingPathComponent("python3") })
             .first(where: { FileManager.default.isExecutableFile(atPath: $0.path) }) else {
             throw XCTSkip("Python 3 is unavailable for the loopback HTTP fixture.")
@@ -31,17 +36,23 @@ private final class LoopbackMetadataFixture {
         try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true,
                                                 attributes: [.posixPermissions: 0o700])
         let info = directory.appendingPathComponent("server.json")
+        let diagnostics = directory.appendingPathComponent("fixture-stderr.txt")
+        _ = FileManager.default.createFile(atPath: diagnostics.path, contents: nil, attributes: [.posixPermissions: 0o600])
+        let diagnosticHandle = try FileHandle(forWritingTo: diagnostics)
+        defer { try? diagnosticHandle.close() }
         let process = Process()
         process.executableURL = python
         process.arguments = ["-u", script.path, info.path, snapshot.path]
         process.standardOutput = FileHandle.nullDevice
-        process.standardError = FileHandle.nullDevice
+        // This known fixture never logs credentials or request bodies. Keeping its
+        // startup stderr makes an interpreter/import/bind failure actionable.
+        process.standardError = diagnosticHandle
         do { try process.run() }
         catch {
             try? FileManager.default.removeItem(at: directory)
             throw MetadataError.network
         }
-        let deadline = Date().addingTimeInterval(4)
+        let deadline = Date().addingTimeInterval(20)
         var port: Int?
         while process.isRunning && Date() < deadline {
             if let data = try? Data(contentsOf: info),
@@ -52,9 +63,22 @@ private final class LoopbackMetadataFixture {
             Thread.sleep(forTimeInterval: 0.01)
         }
         guard let port, let url = URL(string: "http://127.0.0.1:\(port)") else {
-            if process.isRunning { process.terminate() }
+            let wasRunning = process.isRunning
+            if wasRunning {
+                process.terminate()
+                let stopDeadline = Date().addingTimeInterval(2)
+                while process.isRunning && Date() < stopDeadline { Thread.sleep(forTimeInterval: 0.01) }
+                if process.isRunning { _ = kill(process.processIdentifier, SIGKILL) }
+            }
+            let status = wasRunning ? "did not become ready within 20 seconds" : "exited with status \(process.terminationStatus)"
+            let detail: String
+            if let handle = try? FileHandle(forReadingFrom: diagnostics) {
+                let bytes = (try? handle.read(upToCount: 8192)) ?? Data()
+                detail = String(decoding: bytes, as: UTF8.self)
+                try? handle.close()
+            } else { detail = "No fixture diagnostics were written." }
             try? FileManager.default.removeItem(at: directory)
-            throw MetadataError.network
+            throw FixtureStartupError(description: "Loopback Python fixture \(status). \(detail)")
         }
         self.process = process
         self.directory = directory

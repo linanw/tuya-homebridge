@@ -96,7 +96,7 @@ final class CompanionModel: ObservableObject {
             }
             if saved.pending?.command == nil, let change = saved.pending?.change {
                 // A crash after a local command has an unknown outcome; compare fresh states before explicit review.
-                saved.blockedFields.insert(change.id); saved.pending = nil
+                saved.blockedFields.insert(change.id); saved.unknownFields.insert(change.id); saved.pending = nil
                 try persist()
             }
             status = saved.pending == nil ? "Saved bindings loaded. Connect and authorize HomeKit to review them." :
@@ -122,7 +122,7 @@ final class CompanionModel: ObservableObject {
             if let pending = saved.pending, let command = pending.command {
                 guard command.expected.serverId == current.serverId else { throw MetadataError.wrongSource }
                 if command.expected.sourceEpoch != current.sourceEpoch {
-                    if let id = pending.change?.id { saved.blockedFields.insert(id) }
+                    if let id = pending.change?.id { saved.blockedFields.insert(id); saved.unknownFields.insert(id) }
                     saved.pending = nil; saved.confirmedEpoch = nil
                 }
             }
@@ -169,7 +169,7 @@ final class CompanionModel: ObservableObject {
     }
     func resetBindings() {
         guard !busy, !running, saved.pending == nil else { return }
-        saved.bindings = nil; saved.baselines = [:]; saved.blockedFields = []
+        saved.bindings = nil; saved.baselines = [:]; saved.blockedFields = saved.unknownFields
         deviceDrafts = [:]; roomDrafts = [:]; projectionDrafts = [:]; reviews = []
         do { try persist(); status = "Local bindings reset. Select and confirm the intended source and Apple home." }
         catch { show(error) }
@@ -224,7 +224,7 @@ final class CompanionModel: ObservableObject {
                     binding.nameProjections[sourceID] = NameProjection(sourceValue: source.name, localValue: device.name)
                 }
             }
-            if binding != saved.bindings { saved.baselines = [:]; saved.blockedFields = [] }
+            if binding != saved.bindings { saved.baselines = [:]; saved.blockedFields = saved.unknownFields }
             saved.bindings = binding; roomDrafts = rooms; local = apple
             projectionDrafts = binding.nameProjections.mapValues { _ in true }
             try persist()
@@ -290,7 +290,7 @@ final class CompanionModel: ObservableObject {
                     canKeepSource: false, canKeepApple: false))
             }
         }
-        for change in plan.changes where saved.blockedFields.contains(change.id) {
+        for change in plan.changes where saved.blockedFields.contains(change.id) || saved.unknownFields.contains(change.id) {
             var item = reviewItem(change)
             item.reason = "A prior operation failed or was uncertain. Automatic retry is blocked; review fresh values explicitly."
             item.canKeepSource = canResolve(change.id, preferSource: true, remote: remote, apple: apple, binding: binding)
@@ -302,7 +302,9 @@ final class CompanionModel: ObservableObject {
             reviews.append(item)
         }
         try persist()
-        if applyAutomatic, let change = plan.changes.first(where: { !saved.blockedFields.contains($0.id) }) {
+        if applyAutomatic, let change = plan.changes.first(where: {
+            !saved.blockedFields.contains($0.id) && !saved.unknownFields.contains($0.id)
+        }) {
             try Task.checkCancellation()
             guard running else { return }
             try await execute(change, using: client)
@@ -336,7 +338,9 @@ final class CompanionModel: ObservableObject {
     }
 
     private func execute(_ change: SyncChange, using client: MetadataHTTPClient) async throws {
-        guard activeConnection, let binding = saved.bindings else { throw MetadataError.unsupportedOperation }
+        guard activeConnection, !saved.unknownFields.contains(change.id), let binding = saved.bindings else {
+            throw MetadataError.unsupportedOperation
+        }
         // Re-read both sides immediately before issuing the single guarded operation.
         let fresh = try await client.snapshot()
         let apple = try homeKit.snapshot(homeID: binding.homeKitHomeID)
@@ -372,7 +376,9 @@ final class CompanionModel: ObservableObject {
                 saved.blockedFields.insert(change.id); saved.pending = nil; try persist()
                 try await confirmAgreement(change: change, using: client)
             } catch {
-                saved.blockedFields.insert(change.id); saved.pending = nil; try persist(); throw error
+                saved.blockedFields.insert(change.id)
+                if (error as? HomeKitStoreError) == .outcomeUnknown { saved.unknownFields.insert(change.id) }
+                saved.pending = nil; try persist(); throw error
             }
         }
     }
@@ -515,6 +521,7 @@ final class CompanionModel: ObservableObject {
     }
     private func show(_ error: Error) {
         if let safe = error as? MetadataError { status = safe.localizedDescription }
+        else if let safe = error as? HomeKitStoreError { status = safe.localizedDescription }
         else if error is CancellationError { status = "Synchronization paused. Any accepted command remains available for receipt review." }
         else { status = "The operation could not be completed. Check Home permission, connectivity, and saved bindings. No automatic retry was sent." }
     }

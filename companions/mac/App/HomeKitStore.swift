@@ -3,7 +3,7 @@ import Foundation
 @preconcurrency import HomeKit
 import TuyaMetadataCore
 
-private enum HomeKitStoreError: Error, LocalizedError, Sendable, Equatable {
+enum HomeKitStoreError: Error, LocalizedError, Sendable, Equatable {
     case unavailable, homeMissing, targetMissing, staleState, unsupportedChange
     case operationFailed, outcomeUnknown, operationInProgress
 

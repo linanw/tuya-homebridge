@@ -1,21 +1,47 @@
 {
   "name": "@linanw/homebridge-tuya-platform",
-  "version": "2.5.0",
-  "description": "Upgraded Homebridge plugin for Tuya Open API, maintained by linanw.",
+  "version": "2.6.1",
+  "description": "Tuya Open API integration for Homebridge with optional Matter support.",
   "main": "index.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": " homebridge -D -U ./config/ -P ./"
+    "test": "mocha test/datautil.test.js && node --test test/matter_devices.test.js test/matter_bridge.test.js test/matter_integration.test.js test/wirelessswitch.test.js test/platform_errors.test.js test/package.test.js",
+    "dev": "homebridge -D -U ./config/ -P .",
+    "prepublishOnly": "npm test"
+  },
+  "files": [
+    "index.js",
+    "lib/",
+    "util/",
+    "README.zh-CN.md",
+    "CHANGELOG.md",
+    "config.schema.json"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "registry": "https://registry.npmjs.org/"
   },
   "keywords": [
-    "homebridge-plugin"
+    "homebridge-plugin",
+    "supports-matter",
+    "matter"
   ],
   "author": "linanw",
   "license": "MIT",
   "homepage": "https://github.com/linanw/tuya-homebridge",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/linanw/tuya-homebridge.git"
+  },
+  "bugs": {
+    "url": "https://github.com/linanw/tuya-homebridge/issues"
+  },
   "engines": {
-    "node": ">=0.12.0",
-    "homebridge": ">=0.2.0"
+    "node": ">=22.0.0",
+    "homebridge": ">=1.11.4"
+  },
+  "devDependencies": {
+    "homebridge": "2.4.0",
+    "mocha": "12.0.3"
   },
   "dependencies": {
     "@clubedaentrega/cipher": "^1.0.0",

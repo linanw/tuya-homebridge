@@ -13,6 +13,9 @@ const WindowCoveringAccessory = require("./lib/window_covering_accessory");
 const DoorAccessory = require("./lib/door_accessory");
 const ContactSensorAccessory = require("./lib/contactsensor_accessory");
 const WirelessSwitchAccessory = require("./lib/wirelessswitch_accessory");
+const LeakSensorAccessory = require("./lib/leak_sensor_accessory");
+const MatterBridge = require("./lib/matter_bridge");
+const PLUGIN_NAME = require("./package.json").name;
 
 const LogUtil = require("./util/logutil");
 const DataUtil = require("./util/datautil");
@@ -25,7 +28,7 @@ module.exports = function (homebridge) {
   Characteristic = homebridge.hap.Characteristic;
   // registerAccessory' three parameters is plugin-name, accessory-name, constructor-name
   homebridge.registerPlatform(
-    "homebridge-tuya-platform",
+    PLUGIN_NAME,
     "TuyaPlatform",
     TuyaPlatform,
     true
@@ -35,7 +38,8 @@ module.exports = function (homebridge) {
 // Accessory constructor
 class TuyaPlatform {
   constructor(log, config, api) {
-    this.log = new LogUtil(config.options.debug);
+    this.log = new LogUtil(config && config.options && config.options.debug);
+    this.logger = log;
     this.config = config;
     if (!config || !config.options) {
       this.log.log("The config configuration is incorrect, disabling plugin.");
@@ -52,10 +56,15 @@ class TuyaPlatform {
     }
     this.deviceAccessories = new Map();
     this.accessories = new Map();
+    this.matterBridge = new MatterBridge(api, log);
 
     if (api) {
       // Save the API object as plugin needs to register new accessory via this object
       this.api = api;
+      this.api.on("shutdown", () => {
+        if (this.tuyaOpenMQ) this.tuyaOpenMQ.stop();
+        this.matterBridge.close();
+      });
       // Listen to event "didFinishLaunching", this means homebridge already finished loading cached accessories.
       // Platform Plugin should only register new accessory that doesn't exist in homebridge after this event.
       // Or start discover new accessories.
@@ -63,7 +72,9 @@ class TuyaPlatform {
         "didFinishLaunching",
         function () {
           this.log.log("Initializing TuyaPlatform...");
-          this.initTuyaSDK(config);
+          this.initTuyaSDK(config).catch(error => {
+            this.reportError("initialize TuyaPlatform", error);
+          });
         }.bind(this)
       );
     }
@@ -86,10 +97,7 @@ class TuyaPlatform {
       try {
         devices = await api.getDeviceList();
       } catch (e) {
-        // this.log.log(JSON.stringify(e.message));
-        this.log.log(
-          "Failed to get device information. Please check if the config.json is correct."
-        );
+        this.reportError("get device information", e);
         return;
       }
     } else {
@@ -107,51 +115,81 @@ class TuyaPlatform {
       try {
         devices = await api.getDevices();
       } catch (e) {
-        // this.log.log(JSON.stringify(e.message));
-        this.log.log(
-          "Failed to get device information. Please check if the config.json is correct."
-        );
+        this.reportError("get device information", e);
         return;
       }
     }
 
     let disableDevice = config.options.disabledDevice;
+    let initializationFailed = false;
     for (const device of devices) {
-      let isDeviceDisabled = false;
-      if (
-        disableDevice &&
-        disableDevice.length > 0 &&
-        disableDevice.filter((item) => {
-          return item.id == device.id;
-        }).length > 0
-      ) {
-        isDeviceDisabled = true;
+      try {
+        let isDeviceDisabled = false;
+        if (
+          disableDevice &&
+          disableDevice.length > 0 &&
+          disableDevice.filter((item) => {
+            return item.id == device.id;
+          }).length > 0
+        ) {
+          isDeviceDisabled = true;
+        }
+        if (config.options.listDeviceId) {
+          console.log(
+            "id: %s, name: %s%s",
+            device.id,
+            device.name,
+            isDeviceDisabled ? " [DISABLED]" : ""
+          );
+        }
+        if (!isDeviceDisabled) {
+          await this.addAccessory(device);
+        } else {
+          const uuid = this.api.hap.uuid.generate(device.id);
+          const accessory = this.accessories.get(uuid);
+          await this.removeAccessory(accessory);
+        }
+      } catch (error) {
+        initializationFailed = true;
+        this.reportError("initialize device", error, device);
       }
-      if (config.options.listDeviceId) {
-        console.log(
-          "id: %s, name: %s%s",
-          device.id,
-          device.name,
-          isDeviceDisabled ? " [DISABLED]" : ""
-        );
-      }
-      if (!isDeviceDisabled) {
-        this.addAccessory(device);
-      } else {
-        const uuid = this.api.hap.uuid.generate(device.id);
-        const accessory = this.accessories.get(uuid);
-        this.removeAccessory(accessory);
-      }
+    }
+    // An incomplete discovery must not make a failed device's cached Matter
+    // endpoints look deleted. Successful devices have already been bridged.
+    if (!initializationFailed) {
+      await this.matterBridge.reconcileAccessories(
+        Array.from(this.deviceAccessories.values(), driver => driver.homebridgeAccessory)
+      );
     }
 
     const type = config.options.projectType == "1" ? "2.0" : "1.0";
     let mq = new TuyaOpenMQ(api, type, this.log);
     this.tuyaOpenMQ = mq;
     this.tuyaOpenMQ.start();
-    this.tuyaOpenMQ.addMessageListener(this.onMQTTMessage.bind(this));
+    this.tuyaOpenMQ.addMessageListener(message => this.onMQTTMessage(message).catch(error => {
+      this.reportError("handle device message", error, message);
+    }));
   }
 
-  addAccessory(device) {
+  reportError(action, error, device) {
+    const detail = error && typeof error.message === "string" ? error.message : "Unknown error";
+    let identity = "";
+    if (device) {
+      const id = device.id || device.devId || (device.bizData && device.bizData.devId) || "unknown";
+      const accessory = typeof id === "string" && this.api && this.accessories
+        ? this.accessories.get(this.api.hap.uuid.generate(id)) : undefined;
+      const name = device.name || (accessory && accessory.displayName) || "unnamed";
+      identity = ` ${name} (${id})`;
+    }
+    const message = `Failed to ${action}${identity}: ${detail}`;
+    if (this.logger && typeof this.logger.error === "function") {
+      this.logger.error(message);
+    } else if (typeof this.logger === "function") {
+      this.logger(message);
+    }
+  }
+
+  async addAccessory(device) {
     var deviceType = device.category;
     if (mSpecifiedAccessoryType && mSpecifiedAccessoryType.length > 0) {
       const specifiedDevice = mSpecifiedAccessoryType.filter((item) => {
@@ -310,6 +348,9 @@ class TuyaPlatform {
       default:
         break;
     }
+    if (deviceAccessory) {
+      await this.matterBridge.addAccessory(deviceAccessory.homebridgeAccessory);
+    }
   }
 
   //Handle device deletion, addition, status update
@@ -318,7 +359,7 @@ class TuyaPlatform {
       if (message.bizCode == "delete") {
         const uuid = this.api.hap.uuid.generate(message.devId);
         const homebridgeAccessory = this.accessories.get(uuid);
-        this.removeAccessory(homebridgeAccessory);
+        await this.removeAccessory(homebridgeAccessory);
       } else if (message.bizCode == "bindUser") {
         let deviceInfo = await this.tuyaOpenApi.getDeviceInfo(
           message.bizData.devId
@@ -327,10 +368,10 @@ class TuyaPlatform {
           message.bizData.devId
         );
         let device = Object.assign(deviceInfo, functions);
-        this.addAccessory(device);
+        await this.addAccessory(device);
       }
     } else {
-      this.refreshDeviceStates(message);
+      await this.refreshDeviceStates(message);
     }
   }
 
@@ -340,6 +381,9 @@ class TuyaPlatform {
     const deviceAccessorie = this.deviceAccessories.get(uuid);
     if (deviceAccessorie) {
       deviceAccessorie.updateState(message);
+      // Some datapoints, such as a light's work_mode, change device metadata
+      // without changing a HAP characteristic. Reconcile those Matter states too.
+      await this.matterBridge.addAccessory(deviceAccessorie.homebridgeAccessory);
     }
   }
 
@@ -349,7 +393,7 @@ class TuyaPlatform {
       `Register Platform Accessory ${platformAccessory.displayName}`
     );
     this.api.registerPlatformAccessories(
-      "homebridge-tuya-platform",
+      PLUGIN_NAME,
       "TuyaPlatform",
       [platformAccessory]
     );
@@ -371,17 +415,22 @@ class TuyaPlatform {
     this.accessories.set(accessory.UUID, accessory);
   }
 
+  configureMatterAccessory(accessory) {
+    this.matterBridge.configureAccessory(accessory);
+  }
+
   // Sample function to show how developer can remove accessory dynamically from outside event
-  removeAccessory(accessory) {
+  async removeAccessory(accessory) {
     if (accessory) {
       this.log.log(`Remove Accessory ${accessory}`);
       this.api.unregisterPlatformAccessories(
-        "homebridge-tuya-platform",
+        PLUGIN_NAME,
         "TuyaPlatform",
         [accessory]
       );
-      this.accessories.delete(accessory.uuid);
-      this.deviceAccessories.delete(accessory.uuid);
+      this.accessories.delete(accessory.UUID);
+      this.deviceAccessories.delete(accessory.UUID);
+      await this.matterBridge.removeAccessory(accessory);
     }
   }
 }

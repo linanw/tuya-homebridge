@@ -15,6 +15,7 @@ const ContactSensorAccessory = require("./lib/contactsensor_accessory");
 const WirelessSwitchAccessory = require("./lib/wirelessswitch_accessory");
 const LeakSensorAccessory = require("./lib/leak_sensor_accessory");
 const MatterBridge = require("./lib/matter_bridge");
+const { startMetadataSync, stopMetadataSync, invalidateMetadata } = require("./lib/metadata_sync/platform_sync");
 const PLUGIN_NAME = require("./package.json").name;
 
 const LogUtil = require("./util/logutil");
@@ -57,6 +58,7 @@ class TuyaPlatform {
       this.api.on("shutdown", () => {
         if (this.tuyaOpenMQ) this.tuyaOpenMQ.stop();
         this.matterBridge.close();
+        stopMetadataSync(this).catch(() => this.logger?.error?.("[Metadata] Could not close sync service."));
       });
       // Listen to event "didFinishLaunching", this means homebridge already finished loading cached accessories.
       // Platform Plugin should only register new accessory that doesn't exist in homebridge after this event.
@@ -187,6 +189,7 @@ class TuyaPlatform {
     this.tuyaOpenMQ.addMessageListener(message => this.onMQTTMessage(message).catch(error => {
       this.reportError("handle device message", error, message);
     }));
+    await startMetadataSync(this);
   }
 
   reportError(action, error, device) {
@@ -374,6 +377,9 @@ class TuyaPlatform {
   //Handle device deletion, addition, status update
   async onMQTTMessage(message) {
     if (message.bizCode) {
+      if (["nameUpdate", "roomCreate", "roomDelete", "roomNameUpdate", "roomSort", "homeUpdate", "delete", "bindUser"].includes(message.bizCode)) {
+        invalidateMetadata(this);
+      }
       if (message.bizCode == "delete") {
         const uuid = this.api.hap.uuid.generate(message.devId);
         const homebridgeAccessory = this.accessories.get(uuid);

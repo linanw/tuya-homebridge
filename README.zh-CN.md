@@ -9,6 +9,8 @@
 
 ## What's New / 更新日志
 
+开发预览：[Mac 伴侣与元数据同步](docs/metadata-sync/SETUP.md)，以及 [MatterDesk 和 MatterCamViewer 接入](https://github.com/linanw/MatterDesk/pull/1)。功能分支提供可选元数据服务与伴侣适配器；PaaS 可读房间及名称，Custom 可选择开启设备名称写回。完整涂鸦房间双向写入仍不可用，真实账号和设备还需运行验证。本预览尚未包含在 npm 2.6.2 中。
+
 完整版本说明和升级记录请查看 [CHANGELOG.md](CHANGELOG.md) 与 [GitHub Releases](https://github.com/linanw/tuya-homebridge/releases)。
 
 **2.6.2** 为 Homebridge 认证评审做准备，完善账号配置校验和设置界面，并明确声明同时支持 HAP 与 Matter。

@@ -4,6 +4,20 @@ Release notes are available in English and Simplified Chinese. Homebridge UI's *
 
 以下提供英文和简体中文更新说明。Homebridge 插件管理的 **What's New / 更新说明** 读取对应版本的 [GitHub Release](https://github.com/linanw/tuya-homebridge/releases)；后续 npm 包也会包含本更新日志。
 
+## Unreleased / 未发布
+
+### English
+
+- Add an opt-in, authenticated metadata service with source-scoped identities, conditional commands, persistent receipts and explicit provider capabilities.
+- Add a Mac Catalyst HomeKit companion and a MatterDesk metadata adapter for explicit bindings and conflict-aware synchronization. Keep device pairings, Matter endpoints and existing controller aliases intact.
+- PaaS names/rooms can be read; Custom device-name writes require opt-in. Tuya room writes remain disabled pending a verified API. Actual Mac authorization and the user's local MatterDesk integration require further validation. See the [preview setup](docs/metadata-sync/SETUP.md).
+
+### 简体中文
+
+- 新增默认关闭、需要令牌的元数据服务，提供来源身份隔离、条件命令、持久化回执及明确的云端能力声明。
+- 新增 Mac Catalyst HomeKit 伴侣与 MatterDesk 元数据适配器，通过明确绑定和冲突处理执行同步，保留设备配对、Matter 端点及原有控制器别名。
+- PaaS 支持名称及房间读取；Custom 设备名称写回需要单独开启。涂鸦房间写接口未核实前保持禁用，Mac 实际授权及用户本地 MatterDesk 接入仍需验证。详见[预览配置](docs/metadata-sync/SETUP.md)。
+
 ## [2.6.2] - 2026-10-24
 
 ### English

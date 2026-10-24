@@ -1,0 +1,51 @@
+name: Mac companion
+on:
+  push:
+    paths: ['companions/mac/**', 'protocol/metadata-sync/**', '.github/workflows/macos-companion.yml']
+  pull_request:
+    paths: ['companions/mac/**', 'protocol/metadata-sync/**', '.github/workflows/macos-companion.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+defaults:
+  run:
+    shell: bash
+jobs:
+  core-and-catalyst:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check canonical protocol fixture
+        run: cmp protocol/metadata-sync/v1/snapshot.json companions/mac/Core/Tests/TuyaMetadataCoreTests/Fixtures/snapshot.json
+      - name: Test portable Foundation core
+        id: core
+        continue-on-error: true
+        run: swift test --package-path companions/mac/Core 2>&1 | tee "$RUNNER_TEMP/tuya-core.log"
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Catalyst project
+        run: xcodegen generate --spec companions/mac/project.yml
+      - name: Compile Catalyst without signing or HomeKit authorization
+        id: catalyst
+        continue-on-error: true
+        run: >-
+          xcodebuild -project companions/mac/TuyaMetadataCompanion.xcodeproj
+          -scheme TuyaMetadataCompanion -configuration Debug
+          -destination 'platform=macOS,variant=Mac Catalyst'
+          -derivedDataPath companions/mac/DerivedData
+          CODE_SIGNING_ALLOWED=NO build 2>&1 | tee "$RUNNER_TEMP/tuya-catalyst.log"
+      - name: Attach failure summary to the check
+        if: always()
+        run: |
+          if [ '${{ steps.core.outcome }}' != success ]; then
+            python3 .github/scripts/test-failure-summary.py "$RUNNER_TEMP/tuya-core.log"
+          fi
+          if [ '${{ steps.catalyst.outcome }}' != success ]; then
+            python3 .github/scripts/test-failure-summary.py "$RUNNER_TEMP/tuya-catalyst.log"
+          fi
+      - name: Require both core tests and Catalyst compilation
+        if: always()
+        run: test '${{ steps.core.outcome }}' = success && test '${{ steps.catalyst.outcome }}' = success

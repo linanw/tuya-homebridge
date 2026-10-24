@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+defaults:
+  run:
+    shell: bash
+
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
@@ -30,4 +34,7 @@ jobs:
       - name: Install development dependencies
         run: npm install --include=dev --no-audit --no-fund
       - name: Test plugin
-        run: npm test
+        run: npm test 2>&1 | tee "$RUNNER_TEMP/tuya-tests.log"
+      - name: Attach failure summary to the check
+        if: failure()
+        run: python3 .github/scripts/test-failure-summary.py "$RUNNER_TEMP/tuya-tests.log"

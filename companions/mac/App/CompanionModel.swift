@@ -186,13 +186,16 @@ final class CompanionModel: ObservableObject {
         guard let source = sourceDevices.first(where: { $0.id == sourceID }),
               let localID = deviceDrafts[sourceID], let device = appleDevices.first(where: { $0.id == localID }),
               source.name.utf8.count > 64 else { return false }
+        return hapProjection(source.name).utf8.elementsEqual(device.name.utf8)
+    }
+    private func hapProjection(_ name: String) -> String {
         var prefix = ""
-        for scalar in source.name.unicodeScalars {
+        for scalar in name.unicodeScalars {
             let piece = String(scalar)
             if prefix.utf8.count + piece.utf8.count > 64 { break }
             prefix += piece
         }
-        return prefix.utf8.elementsEqual(device.name.utf8)
+        return prefix
     }
 
     func confirmBindings() async {
@@ -216,12 +219,14 @@ final class CompanionModel: ObservableObject {
                 deviceBindings: devices, roomBindings: rooms)
             for (sourceID, confirmed) in projectionDrafts where confirmed && projectionSuggestion(for: sourceID) {
                 if let source = snapshot.devices.first(where: { $0.id == sourceID }),
-                   let device = apple.devices.first(where: { $0.id == devices[sourceID] }) {
+                   let device = apple.devices.first(where: { $0.id == devices[sourceID] }),
+                   hapProjection(source.name).utf8.elementsEqual(device.name.utf8) {
                     binding.nameProjections[sourceID] = NameProjection(sourceValue: source.name, localValue: device.name)
                 }
             }
             if binding != saved.bindings { saved.baselines = [:]; saved.blockedFields = [] }
             saved.bindings = binding; roomDrafts = rooms; local = apple
+            projectionDrafts = binding.nameProjections.mapValues { _ in true }
             try persist()
             try await cycle(applyAutomatic: false)
             status = "Bindings confirmed. Review initial differences; automatic writes require an agreed baseline."

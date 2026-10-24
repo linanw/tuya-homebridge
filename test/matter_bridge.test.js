@@ -141,7 +141,9 @@ test('metadata renames update the live label and cache in place and export only 
   assert.equal(calls.removed.length, 0);
   assert.equal(states.get(uuid).bridgedDeviceBasicInformation.uniqueId, 'actual-native-unique-id');
   await bridge.updateAccessoryMetadata(accessory, '灯'.repeat(30));
-  assert.equal(cached.length, 1, 'unchanged metadata causes no repeated native update');
+  assert.equal(cached.length, 2, 'source observations republish metadata for a cache that may still be initializing');
+  assert.equal(calls.updated.filter(call => call.cluster === 'bridgedDeviceBasicInformation').length, 1,
+    'an unchanged label must not repeat the live Matter transaction');
   await bridge.close();
 });
 

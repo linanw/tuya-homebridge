@@ -65,7 +65,8 @@ final class SyncPlannerTests: XCTestCase {
     }
 
     func testDifferentInitialNamesRequireExplicitResolution() throws {
-        let snapshot = try source(); var local = self.local(snapshot); let profile = bindings(snapshot)
+        var snapshot = try source(); snapshot.capabilities.renameDevice = true
+        var local = self.local(snapshot); let profile = bindings(snapshot)
         local.devices[0].name = "Apple alias"
         let plan = SyncPlanner.plan(snapshot: snapshot, local: local, bindings: profile, baselines: [:])
         XCTAssertTrue(plan.changes.isEmpty)
@@ -91,7 +92,8 @@ final class SyncPlannerTests: XCTestCase {
     }
 
     func testOneSidedLocalRenamePlansCloudWriteOnlyWithCapability() throws {
-        let snapshot = try source(); var local = self.local(snapshot); let profile = bindings(snapshot)
+        var snapshot = try source(); snapshot.capabilities.renameDevice = true
+        var local = self.local(snapshot); let profile = bindings(snapshot)
         let baseline = [nameID(snapshot): FieldBaseline(sourceValue: snapshot.devices[0].name, localValue: local.devices[0].name)]
         local.devices[0].name = "Apple changed"
         let plan = SyncPlanner.plan(snapshot: snapshot, local: local, bindings: profile, baselines: baseline)

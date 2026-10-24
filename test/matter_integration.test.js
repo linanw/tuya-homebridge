@@ -103,6 +103,7 @@ test('native Matter endpoints control Tuya drivers and receive MQTT state', { ti
   api.on('registerMatterPlatformAccessories', (...args) => track(server.registerPlatformAccessories(...args)));
   api.on('unregisterMatterPlatformAccessories', (...args) => track(server.unregisterPlatformAccessories(...args)));
   api.on('updateMatterAccessoryState', (...args) => track(server.updateAccessoryState(...args)));
+  api.on('updateMatterPlatformAccessories', descriptors => track(server.updatePlatformAccessories(descriptors)));
   const { platform, commands, errors } = createPlatform(api);
   let restoredPlatform;
   t.after(async () => {
@@ -146,6 +147,21 @@ test('native Matter endpoints control Tuya drivers and receive MQTT state', { ti
   assert.equal(server.getAccessories().length, 8, 'multi-channel switches expose independent endpoints');
   const endpoint = (id, subtype = '') => server.getAccessories().find(accessory =>
     accessory.context.deviceId === id && accessory.context.serviceSubtype === subtype);
+
+  const outlet = endpoint('outlet');
+  const outletAccessory = platform.accessories.get(api.hap.uuid.generate('outlet'));
+  const nativeInfo = server.getAccessoryState(outlet.UUID, 'bridgedDeviceBasicInformation');
+  assert.deepEqual(await platform.matterBridge.getMetadataBindings(outletAccessory.UUID),
+    typeof nativeInfo.uniqueId === 'string' && nativeInfo.uniqueId ? [nativeInfo.uniqueId] : [],
+    'an omitted optional native uniqueId must require explicit binding, never a fabricated identity');
+  const pairingBeforeRename = server.getCommissioningInfo().manualPairingCode;
+  await platform.matterBridge.updateAccessoryMetadata(outletAccessory, '灯'.repeat(40));
+  await drain();
+  assert.equal(server.getAccessoryState(outlet.UUID, 'bridgedDeviceBasicInformation').nodeLabel, '灯'.repeat(10));
+  // Homebridge 2.4's public cache API only updates entries restored from cache;
+  // the live standard cluster must still update on a first registration.
+  assert.equal(endpoint('outlet').UUID, outlet.UUID);
+  assert.equal(server.getCommissioningInfo().manualPairingCode, pairingBeforeRename);
 
   const channel = endpoint('multi-switch', 'switch_1');
   assert.equal(server.getAccessoryState(channel.UUID, 'onOff').onOff, false);
@@ -245,6 +261,12 @@ test('native Matter endpoints control Tuya drivers and receive MQTT state', { ti
   await drain();
   assert.equal(server.getAccessories().length, 1, 'stale cached endpoints are pruned after discovery');
   assert.equal(server.getAccessories()[0].UUID, outletUUID, 'restored endpoints retain their identity');
+  await restored.platform.matterBridge.updateAccessoryMetadata(
+    restored.platform.accessories.get(api.hap.uuid.generate('outlet')), 'Restored renamed outlet');
+  await drain();
+  assert.equal(server.getAccessoryState(outletUUID, 'bridgedDeviceBasicInformation').nodeLabel, 'Restored renamed outlet');
+  assert.equal(server.getAccessories()[0].displayName, 'Restored renamed outlet',
+    'the public metadata update must refresh a restored native descriptor without replacing its endpoint');
   await server.triggerCommand(outletUUID, 'onOff', 'off');
   assert.deepEqual(restored.commands.at(-1), { id: 'outlet', body: { commands: [{ code: 'switch', value: false }] } });
   assert.deepEqual(restored.errors, []);

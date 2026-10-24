@@ -63,8 +63,11 @@ private final class BoundedRequest: NSObject, URLSessionDataDelegate, @unchecked
     }
 
     func urlSession(_ session: URLSession, task: URLSessionTask, didCompleteWithError error: Error?) {
-        lock.lock(); let continuation = continuation; self.continuation = nil; lock.unlock()
-        defer { session.finishTasksAndInvalidate(); self.session = nil; self.task = nil }
+        lock.lock()
+        let continuation = continuation; self.continuation = nil
+        self.session = nil; self.task = nil
+        lock.unlock()
+        defer { session.finishTasksAndInvalidate() }
         if let terminalError { continuation?.resume(throwing: terminalError) }
         else if let error { continuation?.resume(throwing: error) }
         else if let response { continuation?.resume(returning: (bytes, response)) }

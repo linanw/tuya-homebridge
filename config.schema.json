@@ -114,6 +114,61 @@
             "default": false,
             "description": "Print discovered device IDs and names to help configure exclusions or driver overrides. Device identifiers may be private; disable after use."
           },
+          "metadataSync": {
+            "title": "Mac / MatterDesk metadata sync (preview)",
+            "type": "object",
+            "description": "Optional authenticated service for companion apps. Pairing through Matter alone cannot synchronize Apple or Google private rooms. Current PaaS metadata is read-only; room writes are unavailable.",
+            "properties": {
+              "enabled": {
+                "title": "Enable metadata service",
+                "type": "boolean",
+                "default": false
+              },
+              "tokenEnv": {
+                "title": "Access token environment variable",
+                "type": "string",
+                "default": "TUYA_METADATA_TOKEN",
+                "pattern": "^[A-Za-z_][A-Za-z0-9_]*$",
+                "description": "Set this variable in the Homebridge service environment to a separate random token of at least 32 characters. Enter the variable name here, not the token."
+              },
+              "host": {
+                "title": "Listen address",
+                "type": "string",
+                "default": "127.0.0.1",
+                "description": "Loopback by default. For a companion on another computer, use HTTPS with a trusted certificate or a separately configured HTTPS reverse proxy."
+              },
+              "port": {
+                "title": "Listen port",
+                "type": "integer",
+                "minimum": 1,
+                "maximum": 65535,
+                "default": 8787
+              },
+              "tlsCertPath": {
+                "title": "TLS certificate file",
+                "type": "string",
+                "description": "Absolute path to a PEM certificate file. Required together with a private key when listening beyond loopback."
+              },
+              "tlsKeyPath": {
+                "title": "TLS private key file",
+                "type": "string",
+                "description": "Absolute path to a PEM private key file, readable only by the Homebridge service account."
+              },
+              "pollIntervalSeconds": {
+                "title": "Tuya metadata refresh interval",
+                "type": "integer",
+                "minimum": 60,
+                "default": 300,
+                "description": "One shared source poll serves all companion clients; ordinary device controls keep using MQTT."
+              },
+              "allowWrites": {
+                "title": "Allow supported Tuya metadata writes",
+                "type": "boolean",
+                "default": false,
+                "description": "Opt in to verified provider operations only. Currently Custom project device rename is supported; PaaS rename and all room writes remain disabled."
+              }
+            }
+          },
           "disabledDevice": {
             "title": "Excluded devices",
             "type": "array",

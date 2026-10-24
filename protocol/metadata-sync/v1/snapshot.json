@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "serverId": "8c4eec7f-7f15-4507-b7ac-5189b3b821a0",
+  "sourceEpoch": "6b25f764-1d0e-43c0-a129-4ab09b158c83",
+  "revision": "1",
+  "observedAt": "2026-10-24T08:00:00.000Z",
+  "available": true,
+  "roomsAvailable": true,
+  "sourceKind": "tuya-project-paas",
+  "capabilities": {"read": true, "renameDevice": false, "moveDevice": false, "renameRoom": false},
+  "limitations": {"renameDevice": "unverified_tuya_device_write_contract", "moveDevice": "unverified_tuya_room_write_contract", "renameRoom": "unverified_tuya_room_write_contract"},
+  "homes": [{"id": "h_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "name": "Home"}],
+  "rooms": [{"id": "r_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "homeId": "h_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "name": "Study"}],
+  "devices": [{
+    "id": "d_aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+    "name": "Study light",
+    "homeId": "h_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+    "roomId": "r_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+    "roomStatus": "assigned",
+    "bindings": {"hapSerialNumber": null, "hapAccessoryUuid": "9da87c3d-30e8-4aa4-a8b8-8646241e83cf", "matterUniqueIds": ["fixture-matter-unique-id"]}
+  }]
+}

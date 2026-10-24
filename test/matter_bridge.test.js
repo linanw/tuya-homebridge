@@ -123,6 +123,28 @@ test('deduplicates discovery and sends only changed cluster attributes', async (
   await bridge.close();
 });
 
+test('metadata renames update the live label and cache in place and export only actual Matter unique IDs', async () => {
+  const { api, bridge, calls, accessory, service, states } = fixture();
+  const cached = [];
+  api.matter.updatePlatformAccessories = async descriptors => cached.push(...descriptors);
+  await bridge.addAccessory(accessory);
+  const uuid = calls.registered[0].descriptors[0].UUID;
+  states.get(uuid).bridgedDeviceBasicInformation = { uniqueId: 'actual-native-unique-id', nodeLabel: service.displayName };
+  assert.deepEqual(await bridge.getMetadataBindings(accessory.UUID), ['actual-native-unique-id']);
+  await bridge.updateAccessoryMetadata(accessory, '灯'.repeat(30));
+  const label = states.get(uuid).bridgedDeviceBasicInformation.nodeLabel;
+  assert.equal(label, '灯'.repeat(10));
+  assert.equal(cached[0].displayName, label);
+  assert.equal(cached[0].UUID, uuid);
+  assert.equal(service.displayName, 'Outlet 1');
+  assert.equal(calls.registered.length, 1);
+  assert.equal(calls.removed.length, 0);
+  assert.equal(states.get(uuid).bridgedDeviceBasicInformation.uniqueId, 'actual-native-unique-id');
+  await bridge.updateAccessoryMetadata(accessory, '灯'.repeat(30));
+  assert.equal(cached.length, 1, 'unchanged metadata causes no repeated native update');
+  await bridge.close();
+});
+
 test('replaces generic HAP metadata and bounds Matter identity fields', async () => {
   const { api, bridge, calls, accessory } = fixture();
   api.hap.Characteristic = {

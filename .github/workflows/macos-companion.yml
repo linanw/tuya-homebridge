@@ -1,0 +1,32 @@
+name: Mac companion
+on:
+  push:
+    paths: ['companions/mac/**', 'protocol/metadata-sync/**', '.github/workflows/macos-companion.yml']
+  pull_request:
+    paths: ['companions/mac/**', 'protocol/metadata-sync/**', '.github/workflows/macos-companion.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  core-and-catalyst:
+    runs-on: macos-15
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Check canonical protocol fixture
+        run: cmp protocol/metadata-sync/v1/snapshot.json companions/mac/Core/Tests/TuyaMetadataCoreTests/Fixtures/snapshot.json
+      - name: Test portable Foundation core
+        run: swift test --package-path companions/mac/Core
+      - name: Install XcodeGen
+        run: brew install xcodegen
+      - name: Generate Catalyst project
+        run: xcodegen generate --spec companions/mac/project.yml
+      - name: Compile Catalyst without signing or HomeKit authorization
+        run: >-
+          xcodebuild -project companions/mac/TuyaMetadataCompanion.xcodeproj
+          -scheme TuyaMetadataCompanion -configuration Debug
+          -destination 'platform=macOS,variant=Mac Catalyst'
+          -derivedDataPath companions/mac/DerivedData
+          CODE_SIGNING_ALLOWED=NO build

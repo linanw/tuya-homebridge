@@ -4,7 +4,7 @@
   "description": "Tuya Open API integration for Homebridge with optional Matter support.",
   "main": "index.js",
   "scripts": {
-    "test": "mocha test/datautil.test.js && node --test test/matter_devices.test.js test/matter_bridge.test.js test/matter_integration.test.js test/wirelessswitch.test.js test/platform_errors.test.js test/accessory_errors.test.js test/cloud_runtime.test.js test/verification.test.js test/package.test.js",
+    "test": "mocha test/datautil.test.js && node --test test/matter_devices.test.js test/matter_bridge.test.js test/matter_integration.test.js test/wirelessswitch.test.js test/platform_errors.test.js test/accessory_errors.test.js test/cloud_runtime.test.js test/verification.test.js test/package.test.js test/metadata_sync.test.js test/metadata_provider.test.js test/metadata_platform.test.js test/matterdesk_metadata.test.js",
     "dev": "homebridge -D -U ./config/ -P .",
     "prepublishOnly": "npm test"
   },
@@ -14,7 +14,9 @@
     "util/",
     "README.zh-CN.md",
     "CHANGELOG.md",
-    "config.schema.json"
+    "config.schema.json",
+    "docs/metadata-sync/",
+    "protocol/metadata-sync/"
   ],
   "publishConfig": {
     "access": "public",

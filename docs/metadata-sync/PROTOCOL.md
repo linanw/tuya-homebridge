@@ -1,6 +1,10 @@
 # Metadata Sync v1 (implementation contract)
 
-This contract is implemented by plugin **2.7.0-beta.2**, published through npm's separate `beta` channel; stable `latest` remains **2.6.2**. Release availability is determined by the registry and matching GitHub pre-release. Native Matter continues to control devices; the authenticated metadata service is a separate integration for the Mac HomeKit companion and compatible Matter controllers. It does not obtain Apple/Google private home information through Matter. See [installation and single-device testing](SETUP.md).
+This contract is implemented by plugin **2.7.0-beta.3**, published through npm's separate `beta` channel; stable `latest` remains **2.6.2**. Release availability is determined by the registry and matching GitHub pre-release. Native Matter continues to control devices; the authenticated metadata service is a separate integration for the Mac HomeKit companion and compatible Matter controllers. It does not obtain Apple/Google private home information through Matter. See [installation and single-device testing](SETUP.md).
+
+Beta.3 fixes native window-covering confirmation by leaving derived motion to Homebridge while retaining exact position/configuration checks. It also corrects lighting error context and reports when Tuya API returns `2001` (device offline); it does not change command payloads or resolve that API rejection. These changes leave metadata schema version 1, device identities and pairings intact.
+
+beta.3 由 Homebridge 管理窗帘派生运动状态，保留位置与配置的精确确认，修复原生状态确认超时；同时纠正照明错误特征并提示涂鸦 API 返回 `2001`，不修改指令内容，也不代表解决该 API 拒绝。元数据 schema version 1、设备身份与配对保持原样。
 
 Beta.2 corrects the underlying Tuya query signing: query-key sorting, RFC 3986 transport encoding and one canonical-URL decode, including comma-separated batch `device_ids`. The `1004 sign invalid` defect also exists in 2.6.2 and is independent of this metadata protocol. Metadata Sync stays at schema version 1; MatterDesk 0.7.0-beta.1 and MatterCamViewer 2.5.0-beta.1 remain compatible. See [upgrade and safe operation diagnostics](SETUP.md).
 

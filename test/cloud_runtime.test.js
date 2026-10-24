@@ -11,6 +11,7 @@ const LogUtil = require('../util/logutil');
 const TuyaOpenAPI = require('../lib/tuyaopenapi');
 const TuyaSHOpenAPI = require('../lib/tuyashopenapi');
 const TuyaOpenMQ = require('../lib/tuyamqttapi');
+const TuyaSigning = require('../util/tuya_signing');
 
 const credentials = {
   accessId: 'fixture-access-id-private', accessKey: 'fixture-access-key-private',
@@ -157,6 +158,39 @@ test('PaaS login rejection propagates and stops the dependent request', async t 
   await assert.rejects(paas(log).get('/fixture/devices'), /code 1106/);
   assert.equal(requests.length, 1);
   assert.match(requests[0].url, /authorized-login/);
+  assertNoCredentials(records);
+});
+
+test('device-command errors identify Tuya cloud offline status without exposing server messages or retrying', async t => {
+  const { log, records } = logger(false);
+  const deviceId = 'fixture-command-target-not-for-logs';
+  const requests = [];
+  let code = 2001;
+  mockAdapter(t, async config => {
+    requests.push(config);
+    return respond(config, { success: false, code,
+      msg: `${credentials.accessKey} ${credentials.accessToken} ${deviceId}` });
+  });
+  for (const api of [custom(log), paas(log)]) {
+    api.tokenInfo = { ...tokenResult(), expire: Date.now() + 7200000 };
+    for (code of [2001, '2001', 2002]) {
+      const before = requests.length;
+      await assert.rejects(api.sendCommand(deviceId, { commands: [{ code: 'switch_1', value: true }] }), error => {
+        assert.match(error.message, new RegExp(`\\(code ${code}\\)`));
+        assert.match(error.message, /operation: device command/);
+        assert.equal(error.message.includes('Tuya API reports device offline'), String(code) === '2001');
+        assert.ok(!error.message.includes(deviceId));
+        assertNoCredentials(error.message);
+        return true;
+      });
+      await new Promise(resolve => setTimeout(resolve, 10));
+      assert.equal(requests.length, before + 1, 'failed commands must not be automatically retried');
+    }
+  }
+  for (const route of [`/v1.0/devices/${deviceId}/commands`, `/v1.0/iot-03/devices/${deviceId}/commands`]) {
+    assert.equal(TuyaSigning.operationName(route, 'POST'), 'device command');
+    assert.equal(TuyaSigning.operationName(route, 'GET'), 'cloud operation');
+  }
   assertNoCredentials(records);
 });
 
@@ -366,19 +400,33 @@ test('real PaaS startup signs a two-device batch using the official canonical UR
   assertNoCredentials(records);
 });
 
-test('a Tuya application failure reaches a real HomeKit setter callback without hanging', { timeout: 3000 }, async t => {
-  mockAdapter(t, async config => respond(config, { success: false, code: 1106 }));
+test('a Tuya offline rejection reaches the real On setter without false success, misleading brightness logs, or retries', { timeout: 3000 }, async t => {
+  let requests = 0;
+  mockAdapter(t, async config => {
+    requests++;
+    return respond(config, { success: false, code: 2001, msg: credentials.accessToken });
+  });
   const { HomebridgeAPI } = require(path.join(path.dirname(require.resolve('homebridge')), 'api.js'));
   const SwitchAccessory = require('../lib/switch_accessory');
   const api = new HomebridgeAPI();
   const { log, records } = logger(false);
-  const platform = { api, log, registerPlatformAccessory() {}, tuyaOpenApi: custom(log) };
+  const cloud = custom(log); cloud.tokenInfo = { ...tokenResult(), expire: Date.now() + 7200000 };
+  const platform = { api, log, registerPlatformAccessory() {}, tuyaOpenApi: cloud };
   const driver = new SwitchAccessory(platform, undefined, { id: 'fixture-switch', name: 'Fixture switch',
     status: [{ code: 'switch', value: false }] }, { subType: ['switch'] });
   const characteristic = driver.homebridgeAccessory.getService(api.hap.Service.Switch)
     .getCharacteristic(api.hap.Characteristic.On);
   await assert.rejects(characteristic.handleSetRequest(true));
   assert.ok(records.some(([level]) => level === 'error'), 'a failed command must be visible with debug disabled');
+  const errors = records.filter(([level]) => level === 'error').map(record => require('node:util').format(...record.slice(1))).join('\n');
+  assert.match(errors, /Characteristic\.On Error/);
+  assert.match(errors, /operation: device command/);
+  assert.match(errors, /Tuya API reports device offline/);
+  assert.ok(!errors.includes('Characteristic.Brightness'));
+  assert.ok(!errors.includes('fixture-switch'));
+  assert.equal(driver.hasValidCache(), false);
+  await new Promise(resolve => setTimeout(resolve, 10));
+  assert.equal(requests, 1);
   assertNoCredentials(records);
 });
 

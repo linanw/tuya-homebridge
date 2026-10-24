@@ -4,6 +4,26 @@ Release notes are available in English and Simplified Chinese. Homebridge UI's *
 
 以下提供英文和简体中文更新说明。Homebridge 插件管理的 **What's New / 更新说明** 读取对应版本的 [GitHub Release](https://github.com/linanw/tuya-homebridge/releases)；后续 npm 包也会包含本更新日志。
 
+## [2.7.0-beta.3] - 2026-10-24
+
+### English
+
+- Fix Matter window-covering confirmation timeouts reproduced with Homebridge 2.4. The HAP `PositionState` default is not physical motion feedback; let the native server derive motion and continue confirming target/current positions exactly.
+- On registration, correct legacy cached movement when confirmed target/current positions coincide, without operating the motor or replacing the endpoint.
+- Preserve Tuya datapoint commands, position/configuration checks and pairing data. Restore the physical target after native initialization as before.
+- Report the actual failed lighting characteristic instead of always saying `Brightness`. Add a static `device command` label and the hint **Tuya API reports device offline** for `2001`. Command payloads are unchanged.
+- The API rejection is not resolved by this diagnostic change. If App control works over mobile data, check the same device's cloud-project `online` status, account linkage and data center.
+- Publish through `beta`; stable `latest` stays at 2.6.2. Desktop versions remain MatterDesk 0.7.0-beta.1 and MatterCamViewer 2.5.0-beta.1.
+
+### 简体中文
+
+- 修复已在 Homebridge 2.4 复现的 Matter 窗帘状态确认超时。HAP `PositionState` 默认值并非真实运动反馈，改由原生服务派生运动状态，继续精确确认目标与当前位置。
+- 注册时，对已确认目标与当前位置相等的窗帘，一次性修正旧缓存残留的运动状态，不操作电机或替换端点。
+- 保留涂鸦数据点指令、位置与配置检查、配对数据；原生初始化后仍恢复设备目标位置。
+- 照明错误日志显示实际失败的特征，不再固定写成 `Brightness`；新增静态 `device command` 标签及 `2001` 的**涂鸦 API 报告设备离线**提示，本次不修改指令内容。
+- 诊断改进不代表解决 API 拒绝。即使 App 通过移动数据仍可控，也需核对云项目中同一设备的 `online` 状态、关联账号与数据中心。
+- 通过 `beta` 发布，稳定 `latest` 保持 2.6.2；桌面版本仍为 MatterDesk 0.7.0-beta.1、MatterCamViewer 2.5.0-beta.1。
+
 ## [2.7.0-beta.2] - 2026-10-24
 
 ### English

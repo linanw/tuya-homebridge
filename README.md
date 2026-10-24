@@ -9,7 +9,9 @@ A Homebridge plugin maintained by linanw for controlling Tuya devices through HA
 
 ## What's New
 
-**2.7.0-beta.2** fixes `1004 sign invalid` caused by signing comma-separated batch `device_ids`. The defect also exists in 2.6.2 and is independent of metadata sync. Requests now sort query keys, use RFC 3986 transport encoding and decode the canonical URL once, following the [official SDK](https://github.com/tuya/tuya-connector-nodejs/blob/master/src/core/client.ts). Offline regression tests cover sorting, encoding and batch IDs; live Tuya validation remains pending.
+**2.7.0-beta.3** fixes Matter window-covering confirmation timeouts: Homebridge derives motion from target/current position, and the plugin still confirms those positions. It also reports the actual failed lighting characteristic and adds a safe hint when Tuya API reports device offline (`2001`). Device commands and pairings are preserved; the API rejection still needs investigation.
+
+The beta retains the beta.2 fix for `1004 sign invalid` on comma-separated batch `device_ids`: sorted query keys, RFC 3986 transport encoding and one canonical-URL decode, following the [official SDK](https://github.com/tuya/tuya-connector-nodejs/blob/master/src/core/client.ts). That defect also exists in 2.6.2 and is independent of metadata sync.
 
 The beta includes an opt-in [metadata service and Mac companion](docs/metadata-sync/SETUP.md), with [MatterDesk 0.7.0-beta.1 and MatterCamViewer 2.5.0-beta.1 integration](https://github.com/linanw/MatterDesk/blob/matterdesk-v0.7.0-beta.1/docs/TUYA_METADATA_SYNC.md). With `allowWrites` enabled, PaaS supports device-name and room-name writes; Custom supports device-name writes only. Moving devices between Tuya rooms remains disabled.
 
@@ -55,12 +57,12 @@ Replace the storage path with your existing Homebridge directory containing `con
 
 ### Install or leave the metadata beta
 
-In Homebridge UI, open the plugin card's **⋮ → Manage Versions**, then select **beta / 2.7.0-beta.2** when it is listed. For CLI installs, use the same Node/npm installation or container that runs your Homebridge service:
+In Homebridge UI, open the plugin card's **⋮ → Manage Versions**, then select **beta / 2.7.0-beta.3** when it is listed. For CLI installs, use the same Node/npm installation or container that runs your Homebridge service:
 
 ```sh
 npm install -g @linanw/homebridge-tuya-platform@beta
 # Pin this beta when reproducing a test:
-npm install -g @linanw/homebridge-tuya-platform@2.7.0-beta.2
+npm install -g @linanw/homebridge-tuya-platform@2.7.0-beta.3
 ```
 
 Restart the existing Homebridge service with its existing storage. Keep the platform configuration, child bridge identity, Matter storage and pairings. To return to the stable channel:
@@ -214,13 +216,14 @@ Unsupported services remain available through HomeKit. This includes heaters/HVA
 
 ### Publish release notes
 
-Add an English and Chinese entry to `CHANGELOG.md` matching `package.json`, commit the changes, and push the matching tag. Use `v2.7.0-beta.2` for this beta and publish its npm package with `--tag beta`; do not move the stable `latest` tag from 2.6.2. The release workflow runs tests and prepares the corresponding GitHub pre-release. Homebridge UI reads that release body for **What's New / Notes** and the tagged changelog for its changelog view. npm publication and release-asset upload are separate steps.
+Add an English and Chinese entry to `CHANGELOG.md` matching `package.json`, commit the changes, and push the matching tag. Use `v2.7.0-beta.3` for this beta and publish its npm package with `--tag beta`; do not move the stable `latest` tag from 2.6.2. The release workflow runs tests and prepares the corresponding GitHub pre-release. Homebridge UI reads that release body for **What's New / Notes** and the tagged changelog for its changelog view. npm publication and release-asset upload are separate steps.
 
 ## Tuya OpenApi Login Error Code
 
 | Error code | Error message | Troubleshooting |
 |:----|:----|:----|
-| 1004 | sign invalid | First install **2.7.0-beta.2** and restart the existing service; keep your credentials, storage and pairings. If it persists, report versions and sanitized error lines. Static `operation` labels such as `account login`, `associated device list` and `batch device functions` locate the failing step without URLs or device IDs. Review logs before sharing. |
+| 1004 | sign invalid | First install **2.7.0-beta.3** and restart the existing service; keep your credentials, storage and pairings. If it persists, report versions and sanitized error lines. Static `operation` labels such as `account login`, `associated device list` and `batch device functions` locate the failing step without URLs or device IDs. Review logs before sharing. |
+| 2001 | device is offline | Tuya API reports device offline; see the [official error codes](https://developer.tuya.com/en/docs/iot/error-code?id=K989ruxx88swc). App control, including over mobile data, may still work. Check the same device's `online` status in the cloud project, account linkage and data center. Beta.3 adds the static `device command` label and clearer errors; it does not fix the API rejection or change brightness commands. |
 | 1106 | permission deny | <ul><li> Your app account is not linked with your cloud project: Link devices by using the Tuya Smart or Smart Life app with your cloud project on the [Tuya IoT Platform](https://iot.tuya.com/cloud/). For more information, see [Link devices by app account](https://developer.tuya.com/en/docs/iot/Platform_Configuration_smarthome?id=Kamcgamwoevrx#title-3-Link%20devices%20by%20app%20account).</li><li>The **TuyaSmart** or **SmartLife** app account which registered using **Google** or **Apple ID** email need to link your phone number and use the linked phone number as **username** to login. </li><li> Incorrect username or password: Enter the correct account and password of the Tuya Smart or Smart Life app in the **Account** and **Password** fields. Note that the app account must be the one you used to link devices with your cloud project on the [Tuya IoT Platform](https://iot.tuya.com/cloud/).</li><li>Incorrect endpoint: See [Endpoint](https://developer.tuya.com/en/docs/iot/Tuya_Homebridge_Plugin?id=Kamcldj76lhzt#endpoint) and enter the correct endpoint.</li><li>Incorrect countryCode: Enter the [code of the country](https://countrycode.org/) you select on logging in to the Tuya Smart or Smart Life app.</li><li>Incorrect **schema** (case insensitive). Currently only **tuyaSmart** and **smartlife** are supported.</li></ul> |
 | 1100 | param is empty | `username` or `appSchema` is empty: See [Edit config.json](https://developer.tuya.com/en/docs/iot/Tuya_Homebridge_Plugin?id=Kamcldj76lhzt#config) file and enter the correct parameter. |
 | 2017 | schema does not exist | Incorrect `appSchema` in `config.json`: See [Edit config.json](https://developer.tuya.com/en/docs/iot/Tuya_Homebridge_Plugin?id=Kamcldj76lhzt#config) file and enter the correct parameter. |

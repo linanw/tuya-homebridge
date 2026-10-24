@@ -361,13 +361,26 @@ test('coverings invert lift position and reject unsupported physical stop', asyn
   const mapping = context.mapping();
   assert.equal(mapping.getState().windowCovering.targetPositionLiftPercent100ths, 2500);
   assert.equal(mapping.getState().windowCovering.currentPositionLiftPercent100ths, 5000);
-  assert.deepEqual(mapping.getState().windowCovering.operationalStatus, { global: 1, lift: 1, tilt: 0 });
+  assert.equal(Object.hasOwn(mapping.getState().windowCovering, 'operationalStatus'), false);
   await mapping.handlers.windowCovering.goToLiftPercentage({ liftPercent100thsValue: 2500 });
   await mapping.handlers.windowCovering.upOrOpen();
   await mapping.handlers.windowCovering.downOrClose();
   assert.deepEqual(context.writes, [['TargetPosition', 75], ['TargetPosition', 100], ['TargetPosition', 0]]);
   await assert.rejects(async () => mapping.handlers.windowCovering.stopMotion(), /does not support stopping/);
   await assert.rejects(async () => mapping.handlers.windowCovering.goToLiftPercentage({ liftPercent100thsValue: 10001 }), /Lift position/);
+});
+
+test('coverings publish precise positions without asserting mandatory HAP motion defaults', () => {
+  for (const [target, current] of [[100, 30], [0, 70], [50, 50]]) {
+    for (const position of [undefined, 0, 1, 2]) {
+      const values = { TargetPosition: target, CurrentPosition: current };
+      if (position !== undefined) values.PositionState = position;
+      const state = fixture('WindowCovering', values).mapping().getState().windowCovering;
+      assert.equal(state.targetPositionLiftPercent100ths, (100 - target) * 100);
+      assert.equal(state.currentPositionLiftPercent100ths, (100 - current) * 100);
+      assert.equal(Object.hasOwn(state, 'operationalStatus'), false);
+    }
+  }
 });
 
 test('coverings forward stop only if a HAP HoldPosition characteristic exists', async () => {

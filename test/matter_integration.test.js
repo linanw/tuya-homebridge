@@ -161,6 +161,64 @@ test('native Matter endpoints control Tuya drivers and receive MQTT state', { ti
   const endpoint = (id, subtype = '') => server.getAccessories().find(accessory =>
     accessory.context.deviceId === id && accessory.context.serviceSubtype === subtype);
 
+  // The actual Tuya covering driver never sets HAP PositionState, whose
+  // mandatory default is DECREASING. Native Matter derives motion from the
+  // positions and resets target=current during initialization, so mismatched
+  // targets must be restored without forcing that unrelated HAP default back.
+  const coveringCases = [
+    { id: 'cover-opening', target: 10, current: 70, nativeTarget: 1000, nativeCurrent: 7000, movement: 1 },
+    { id: 'cover-closing', target: 90, current: 30, nativeTarget: 9000, nativeCurrent: 3000, movement: 2 },
+    { id: 'cover-equal', target: 60, current: 60, nativeTarget: 6000, nativeCurrent: 6000, movement: 0 },
+    { id: 'cover-reversed', target: 75, current: 30, nativeTarget: 2500, nativeCurrent: 7000, movement: 1, fullyOpen: true },
+  ];
+  const coveringCommands = commands.length;
+  for (const item of coveringCases) {
+    await platform.addAccessory({ id: item.id, name: item.id, category: 'cl', status: [
+      ...(item.fullyOpen ? [{ code: 'situation_set', value: 'fully_open' }] : []),
+      { code: 'percent_control', value: item.target }, { code: 'percent_state', value: item.current },
+    ] });
+    const state = server.getAccessoryState(endpoint(item.id).UUID, 'windowCovering');
+    assert.equal(state.targetPositionLiftPercent100ths, item.nativeTarget);
+    assert.equal(state.currentPositionLiftPercent100ths, item.nativeCurrent);
+    // OperationalStatus is a bitmap with default numeric value zero. Native
+    // Matter may expose zero-valued fields as absent until the first movement.
+    assert.equal(state.operationalStatus.lift ?? 0, item.movement);
+    const hap = platform.accessories.get(api.hap.uuid.generate(item.id));
+    assert.equal(hap.getService(api.hap.Service.WindowCovering)
+      .getCharacteristic(api.hap.Characteristic.PositionState).value, 0);
+  }
+  const movingCover = endpoint('cover-opening');
+  await platform.onMQTTMessage({ devId: 'cover-opening', status: [{ code: 'percent_state', value: 10 }] });
+  assert.equal(server.getAccessoryState(movingCover.UUID, 'windowCovering').currentPositionLiftPercent100ths, 1000);
+  assert.equal(server.getAccessoryState(movingCover.UUID, 'windowCovering').operationalStatus.lift, 0);
+  await platform.onMQTTMessage({ devId: 'cover-opening', status: [
+    { code: 'percent_control', value: 90 }, { code: 'percent_state', value: 40 },
+  ] });
+  assert.equal(server.getAccessoryState(movingCover.UUID, 'windowCovering').targetPositionLiftPercent100ths, 9000);
+  assert.equal(server.getAccessoryState(movingCover.UUID, 'windowCovering').currentPositionLiftPercent100ths, 4000);
+  assert.equal(server.getAccessoryState(movingCover.UUID, 'windowCovering').operationalStatus.lift, 2);
+  await platform.onMQTTMessage({ devId: 'cover-opening', status: [{ code: 'percent_state', value: 90 }] });
+  assert.equal(server.getAccessoryState(movingCover.UUID, 'windowCovering').operationalStatus.lift, 0);
+  assert.equal(commands.length, coveringCommands, 'initial and MQTT positions must not send covering commands');
+  await invoke(movingCover.UUID, 'windowCovering', 'goToLiftPercentage', { liftPercent100thsValue: 2500 });
+  await new Promise(resolve => setImmediate(resolve));
+  await platform.matterBridge.queue;
+  await drain();
+  assert.equal(server.getAccessoryState(movingCover.UUID, 'windowCovering').targetPositionLiftPercent100ths, 2500);
+  assert.equal(server.getAccessoryState(movingCover.UUID, 'windowCovering').currentPositionLiftPercent100ths, 9000,
+    'a command acknowledgement must not replace the last physical position');
+  assert.deepEqual(commands.at(-1), { id: 'cover-opening', body: { commands: [{ code: 'percent_control', value: 25 }] } });
+  await platform.onMQTTMessage({ devId: 'cover-opening', status: [{ code: 'percent_state', value: 25 }] });
+  assert.equal(server.getAccessoryState(movingCover.UUID, 'windowCovering').currentPositionLiftPercent100ths, 2500);
+  assert.equal(server.getAccessoryState(movingCover.UUID, 'windowCovering').operationalStatus.lift, 0);
+  assert.equal(commands.length, coveringCommands + 1, 'covering readback must not echo another cloud command');
+  await drain();
+  for (const item of coveringCases) await platform.onMQTTMessage({ devId: item.id, bizCode: 'delete' });
+  await drain();
+  assert.equal(server.getAccessories().length, 8);
+  assert.deepEqual(errors, []);
+  assert.deepEqual(nativeFailures, []);
+
   const outlet = endpoint('outlet');
   const outletAccessory = platform.accessories.get(api.hap.uuid.generate('outlet'));
   const nativeInfo = server.getAccessoryState(outlet.UUID, 'bridgedDeviceBasicInformation');
@@ -272,8 +330,23 @@ test('native Matter endpoints control Tuya drivers and receive MQTT state', { ti
   assert.deepEqual(errors, []);
   assert.deepEqual(nativeFailures, []);
 
+  await platform.addAccessory({ id: 'cover-restored-moving', name: 'Cached moving covering', category: 'cl', status: [
+    { code: 'percent_control', value: 70 }, { code: 'percent_state', value: 40 },
+  ] });
+  const movingCoverUUID = endpoint('cover-restored-moving').UUID;
   const outletUUID = endpoint('outlet').UUID;
   const pairingCode = server.getCommissioningInfo().manualPairingCode;
+  await platform.onMQTTMessage({ devId: 'cover', status: [
+    { code: 'percent_control', value: 30 }, { code: 'percent_state', value: 30 },
+  ] });
+  // Simulate the old mapper persisting HAP's mandatory DECREASING default even
+  // when the covering has reached its target. Equal positions do not trigger a
+  // native change reactor when this state is restored after a real restart.
+  await api.matter.updateAccessoryState(covering.UUID, 'windowCovering', {
+    operationalStatus: { global: 2, lift: 2, tilt: 0 },
+  });
+  await drain();
+  assert.equal(server.getAccessoryState(covering.UUID, 'windowCovering').operationalStatus.lift, 2);
   await platform.matterBridge.close();
   await drain();
   // Flush the real native cache explicitly: this test builds the server without
@@ -283,11 +356,47 @@ test('native Matter endpoints control Tuya drivers and receive MQTT state', { ti
   server = new MatterServer(serverConfig);
   api._matterServer = server;
   await server.start();
-  assert.equal(server.getAccessories().length, 6);
+  assert.equal(server.getAccessories().length, 7);
   assert.equal(server.getCommissioningInfo().manualPairingCode, pairingCode);
+  assert.equal(server.getAccessoryState(covering.UUID, 'windowCovering').operationalStatus.lift, 2,
+    'the legacy incorrect movement must actually survive the persisted restart');
   const restored = createPlatform(api);
   restoredPlatform = restored.platform;
   for (const cached of server.getAccessories()) restored.platform.configureMatterAccessory(cached);
+  await restored.platform.addAccessory({ id: 'cover', name: 'Restored covering', category: 'cl', status: [
+    { code: 'percent_control', value: 30 }, { code: 'percent_state', value: 30 },
+  ] });
+  assert.equal(endpoint('cover').UUID, covering.UUID, 'covering cache restoration retains the endpoint identity');
+  let restoredCover = server.getAccessoryState(covering.UUID, 'windowCovering');
+  assert.equal(restoredCover.targetPositionLiftPercent100ths, 3000);
+  assert.equal(restoredCover.currentPositionLiftPercent100ths, 3000);
+  assert.equal(restoredCover.operationalStatus.lift ?? 0, 0,
+    'a legacy moving cache must be normalized once when physical positions are equal');
+  assert.equal(restoredCover.operationalStatus.global ?? 0, 0);
+  assert.equal(server.getCommissioningInfo().manualPairingCode, pairingCode);
+  // A fresh physical observation after restoration must still use the native
+  // movement reactor, including a target that differs from current position.
+  await restored.platform.onMQTTMessage({ devId: 'cover', status: [
+    { code: 'percent_control', value: 20 }, { code: 'percent_state', value: 80 },
+  ] });
+  restoredCover = server.getAccessoryState(covering.UUID, 'windowCovering');
+  assert.equal(restoredCover.targetPositionLiftPercent100ths, 2000);
+  assert.equal(restoredCover.currentPositionLiftPercent100ths, 8000);
+  assert.equal(restoredCover.operationalStatus.lift, 1);
+  assert.equal(restored.commands.length, 0, 'restoring stale covering state must not operate the motor');
+  await restored.platform.addAccessory({ id: 'cover-restored-moving', name: 'Restored moving covering', category: 'cl', status: [
+    { code: 'percent_control', value: 20 }, { code: 'percent_state', value: 80 },
+  ] });
+  assert.equal(endpoint('cover-restored-moving').UUID, movingCoverUUID);
+  const restoredMoving = server.getAccessoryState(movingCoverUUID, 'windowCovering');
+  assert.equal(restoredMoving.targetPositionLiftPercent100ths, 2000);
+  assert.equal(restoredMoving.currentPositionLiftPercent100ths, 8000);
+  assert.equal(restoredMoving.operationalStatus.lift, 1);
+  assert.equal(restored.commands.length, 0, 'restoring unequal positions must not operate the motor');
+  assert.equal(server.getCommissioningInfo().manualPairingCode, pairingCode);
+  await drain();
+  await restored.platform.onMQTTMessage({ devId: 'cover', bizCode: 'delete' });
+  await restored.platform.onMQTTMessage({ devId: 'cover-restored-moving', bizCode: 'delete' });
   await restored.platform.addAccessory(devices.find(device => device.id === 'outlet'));
   await restored.platform.matterBridge.reconcileAccessories(restored.platform.accessories.values());
   await drain();

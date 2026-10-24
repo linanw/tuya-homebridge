@@ -9,7 +9,9 @@
 
 ## What's New / 更新日志
 
-**2.7.0-beta.2** 修复逗号分隔的批量 `device_ids` 签名可能触发 `1004 sign invalid` 的问题。此缺陷在 2.6.2 中也已存在，与元数据同步无关。请求按[官方 SDK](https://github.com/tuya/tuya-connector-nodejs/blob/master/src/core/client.ts)规则对 query 键排序，以 RFC 3986 编码传输，对 canonical URL 解码一次。离线回归覆盖排序、编码及批量 ID；真实涂鸦联调仍待验证。
+**2.7.0-beta.3** 修复 Matter 窗帘状态确认超时：由 Homebridge 根据目标与当前位置管理运动状态，插件仍确认位置值。照明错误日志改为实际失败的特征，并在涂鸦 API 报告设备离线（`2001`）时给出安全提示。设备指令与配对保持原样；API 拒绝原因仍需排查。
+
+本版保留 beta.2 的 `1004 sign invalid` 修复：按[官方 SDK](https://github.com/tuya/tuya-connector-nodejs/blob/master/src/core/client.ts)规则对 query 键排序，以 RFC 3986 编码传输，对 canonical URL 解码一次，修正逗号分隔批量 `device_ids` 的签名。该缺陷在 2.6.2 中也已存在，与元数据同步无关。
 
 beta 同时提供可选的[元数据服务与 Mac 伴侣](docs/metadata-sync/SETUP.md)，配合 [MatterDesk 0.7.0-beta.1 和 MatterCamViewer 2.5.0-beta.1](https://github.com/linanw/MatterDesk/blob/matterdesk-v0.7.0-beta.1/docs/TUYA_METADATA_SYNC.md) 测试。开启 `allowWrites` 后，PaaS 可写设备名和房间名，Custom 仅可写设备名。移动设备到其他涂鸦房间仍禁用。
 
@@ -39,12 +41,12 @@ Tuya 设备的控制和状态通知仍依赖涂鸦云服务。启用 Matter 不�
 
 ## 安装 beta 与返回稳定版
 
-在 Homebridge UI 的插件卡片中打开 **⋮ → 管理版本**，选择列出的 **beta / 2.7.0-beta.2**。CLI 必须在实际运行 Homebridge 的同一套 Node/npm 环境或容器中执行：
+在 Homebridge UI 的插件卡片中打开 **⋮ → 管理版本**，选择列出的 **beta / 2.7.0-beta.3**。CLI 必须在实际运行 Homebridge 的同一套 Node/npm 环境或容器中执行：
 
 ```sh
 npm install -g @linanw/homebridge-tuya-platform@beta
 # 复现本轮测试时可固定版本：
-npm install -g @linanw/homebridge-tuya-platform@2.7.0-beta.2
+npm install -g @linanw/homebridge-tuya-platform@2.7.0-beta.3
 ```
 
 随后重启现有 Homebridge 服务，保留配置、子桥身份、存储和配对。返回稳定通道使用：
@@ -228,13 +230,14 @@ npx homebridge -D -U /path/to/local/homebridge-storage -P .
 
 ### 发布更新说明
 
-在 `CHANGELOG.md` 中添加与 `package.json` 版本一致的中英文条目，提交后推送对应标签。本轮使用 `v2.7.0-beta.2`，npm 发布使用 `--tag beta`，稳定 `latest` 保持 2.6.2。Release 工作流会运行测试并创建对应的 GitHub 预发布。Homebridge 插件管理通过 Release 正文显示 **What's New / 更新说明**，通过对应标签内的更新日志显示 Changelog。npm 发布与附件上传是独立步骤。
+在 `CHANGELOG.md` 中添加与 `package.json` 版本一致的中英文条目，提交后推送对应标签。本轮使用 `v2.7.0-beta.3`，npm 发布使用 `--tag beta`，稳定 `latest` 保持 2.6.2。Release 工作流会运行测试并创建对应的 GitHub 预发布。Homebridge 插件管理通过 Release 正文显示 **What's New / 更新说明**，通过对应标签内的更新日志显示 Changelog。npm 发布与附件上传是独立步骤。
 
 ### 常见 Tuya Open API 错误
 
 | 错误码 | 含义 | 排查方向 |
 | --- | --- | --- |
-| `1004` | `sign invalid` | 先升级 **2.7.0-beta.2** 并重启现有服务，保留凭据、存储与配对。若仍报错，提供版本及脱敏错误行。静态 `operation` 标签如 `account login`（登录）、`associated device list`（设备列表）、`batch device functions`（批量功能）用于定位步骤，不含 URL 或设备 ID。分享前检查日志。 |
+| `1004` | `sign invalid` | 先升级 **2.7.0-beta.3** 并重启现有服务，保留凭据、存储与配对。若仍报错，提供版本及脱敏错误行。静态 `operation` 标签如 `account login`（登录）、`associated device list`（设备列表）、`batch device functions`（批量功能）用于定位步骤，不含 URL 或设备 ID。分享前检查日志。 |
+| `2001` | `device is offline` | 涂鸦 API 报告设备离线，见[官方错误码](https://developer.tuya.com/en/docs/iot/error-code?id=K989ruxx88swc)。即使 App 通过移动数据仍可控，也应核对云项目中同一设备的 `online` 状态、关联账号与数据中心。beta.3 增加静态 `device command` 标签与清晰错误，不代表解决 API 拒绝，也不修改亮度指令。 |
 | `1106` | `permission deny` | 检查应用账号与云项目的关联、账号密码、数据中心、国家代码及 `appSchema`；第三方登录账号请参考涂鸦的账号关联要求。 |
 | `1100` | `param is empty` | 检查 `username`、`appSchema` 等必填字段。 |
 | `2017` | `schema does not exist` | 使用正确的 `tuyaSmart` 或 `smartlife` 应用类型。 |

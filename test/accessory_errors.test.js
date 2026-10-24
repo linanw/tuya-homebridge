@@ -1,6 +1,7 @@
 const assert = require('node:assert/strict');
 const path = require('node:path');
 const test = require('node:test');
+const util = require('node:util');
 const { HomebridgeAPI } = require(path.join(path.dirname(require.resolve('homebridge')), 'api.js'));
 
 async function promptly(operation) {
@@ -83,9 +84,10 @@ for (const scenario of cases) {
   test(`${scenario.driver} finishes cached reads, reports unavailable state, and recovers from MQTT updates`, async () => {
     const api = new HomebridgeAPI();
     const commands = [];
+    const errors = [];
     const platform = {
       api,
-      log: { log() {}, error() {} },
+      log: { log() {}, error(...values) { errors.push(util.format(...values)); } },
       registerPlatformAccessory() {},
       tuyaOpenApi: { async sendCommand(id, body) {
         commands.push({ id, body });
@@ -102,6 +104,14 @@ for (const scenario of cases) {
       const setter = service.getCharacteristic(api.hap.Characteristic[scenario.write[0]]);
       await assert.rejects(promptly(setter.handleSetRequest(scenario.write[1])));
       assert.deepEqual(commands, [{ id: device.id, body: { commands: [scenario.command] } }]);
+      if (['switch_accessory', 'outlet_accessory', 'heater_accessory', 'air_purifier_accessory', 'garagedoor_accessory'].includes(scenario.driver)) {
+        assert.ok(errors.some(message => message.includes(`Characteristic.${setter.displayName} Error`)),
+          'failed setters must identify the actual HAP characteristic');
+        assert.ok(errors.every(message => !message.includes('Characteristic.Brightness')),
+          'an On, Active, or door-state failure must not be labeled as brightness');
+      }
+      await new Promise(resolve => setTimeout(resolve, 10));
+      assert.equal(commands.length, 1, 'a rejected device command must not be automatically retried');
     } else {
       // Read-only sensor state may be invalidated after an upstream failure too.
       driver.invalidateCache();

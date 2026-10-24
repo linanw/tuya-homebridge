@@ -49,7 +49,8 @@ Only devices already managed by this plugin are exported. Disabled devices and u
 ## Companion and controller / 伴侣与控制器
 
 - [Mac companion build and setup / Mac 构建与使用](../../companions/mac/README.md)
-- [MatterDesk integration / MatterDesk 接入](../../integrations/matterdesk/README.md)
+- [MatterDesk and MatterCamViewer integration / 两个 Qt App 接入](https://github.com/linanw/MatterDesk/pull/1)
+- [Optional Node controller client / 可选 Node 控制器客户端](../../integrations/matterdesk/README.md)
 - [Metadata Sync v1 protocol / 协议](PROTOCOL.md)
 
 Enable following/sync only after selecting the source and local home and explicitly binding the devices and rooms. Automatic sync requires a previously agreed baseline. Divergent changes appear as a conflict; a user can explicitly choose which current value to keep. A source epoch change requires a fresh read. A queued HTTP receipt is not a successful cloud write: only an authoritative read confirming the desired value can advance the baseline. Uncertain writes are not automatically retried.
@@ -64,4 +65,8 @@ Mac 伴侣需要 HomeKit entitlement、有效签名和家庭数据授权，并�
 
 Node tests cover the HTTP service, source normalization, conflict guards, persistent command receipts and metadata projection without changing endpoint identities. The Mac workflow builds for Mac Catalyst and runs the Foundation core tests. Neither proves real Apple Home authorization, Tuya account permissions, physical device pairing or integration with the user's local MatterDesk build. Those checks require the corresponding Mac, account, LAN and source checkout.
 
+Homebridge 2.4's public metadata-cache API updates restored entries; a newly registered endpoint's cached UI name may lag its live standard `nodeLabel`. The integration preserves the full authoritative name in this metadata service and projects the live label independently, without resetting an endpoint or pairing to force a cache update.
+
 Node 测试覆盖服务、来源归一化、冲突校验、持久化回执及保留端点身份的名称投影；Mac 工作流负责 Catalyst 编译和 Foundation 核心测试。它们不能替代 Apple Home 实际授权、涂鸦账号权限、真实配对和本地 MatterDesk 联调。
+
+Homebridge 2.4 的公开元数据缓存接口仅更新已恢复的条目，新建端点的缓存界面名称可能落后于实时 `nodeLabel`。同步服务保留完整权威名称，实时标签独立更新，不通过重建端点或配对强制刷新缓存。

@@ -9,7 +9,7 @@ A Homebridge plugin maintained by linanw for controlling Tuya devices through HA
 
 ## What's New
 
-Development preview: [Mac companion and MatterDesk metadata sync](docs/metadata-sync/SETUP.md). The feature branch includes an opt-in metadata service and companion adapters. PaaS room/name reads and Custom device-name writes have different capabilities; full bidirectional Tuya room writes and integration with the user's local MatterDesk checkout remain pending. This preview is not included in npm 2.6.2.
+Development preview: [Mac companion and metadata sync](docs/metadata-sync/SETUP.md), with [MatterDesk and MatterCamViewer integration](https://github.com/linanw/MatterDesk/pull/1). The feature branches include an opt-in metadata service and companion adapters. PaaS room/name reads and Custom device-name writes have different capabilities; full bidirectional Tuya room writes remain unavailable. Actual accounts and devices require runtime validation. This preview is not included in npm 2.6.2.
 
 Read the [changelog](CHANGELOG.md) and [GitHub Releases](https://github.com/linanw/tuya-homebridge/releases) for version details and upgrade notes.
 

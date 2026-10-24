@@ -171,8 +171,8 @@ test('replaces generic HAP metadata and bounds Matter identity fields', async ()
   await bridge.close();
 });
 
-test('preserves physical command errors and defers command-driven state updates', async () => {
-  const { bridge, calls, power, accessory } = fixture();
+test('preserves physical command errors and leaves command-driven state to the native behavior', async () => {
+  const { bridge, calls, power, accessory, states } = fixture();
   await bridge.addAccessory(accessory);
   const handler = calls.registered[0].descriptors[0].handlers.onOff.on;
   power.error = new Error('Device offline');
@@ -187,8 +187,16 @@ test('preserves physical command errors and defers command-driven state updates'
   assert.equal(calls.updated.length, 1, 'must not update Matter while its command handler is active');
   complete();
   await command;
+  const uuid = calls.registered[0].descriptors[0].UUID;
+  // Native Homebridge updates the cluster after the plugin handler returns.
+  states.get(uuid).onOff.onOff = true;
   await flush(bridge);
-  assert.deepEqual(calls.updated[1].attributes, { onOff: true });
+  assert.equal(calls.updated.length, 1, 'a native command must not trigger a second state transaction');
+  power.value = false;
+  power.emit('change');
+  await flush(bridge);
+  assert.deepEqual(calls.updated[1].attributes, { onOff: false },
+    'an external return to the previously cached value must still reflect the current native state');
   await bridge.close();
 });
 
@@ -340,6 +348,79 @@ test('suppresses only fan callbacks caused by state mirroring while allowing con
   assert.equal(physicalWrites, 1, 'mirror-generated callbacks must not produce additional physical writes');
   const uuid = calls.registered[0].descriptors[0].UUID;
   assert.equal(states.get(uuid).fanControl.fanMode, 2);
+  await bridge.close();
+});
+
+test('reconciles physical fan attributes after a native setting change without cloud feedback', async () => {
+  const { api, bridge, calls, power, accessory, states } = fixture();
+  let physicalWrites = 0;
+  power.readValue = 100;
+  bridge.deviceFactory = () => ({
+    deviceType: 'Fan',
+    getState: () => ({ fanControl: {
+      fanMode: power.value <= 33 ? 1 : power.value <= 66 ? 2 : 3,
+      percentSetting: power.value, percentCurrent: power.value,
+    } }),
+    handlers: { fanControl: {
+      fanModeChange: async () => { physicalWrites++; },
+      percentSettingChange: async request => {
+        physicalWrites++;
+        power.value = request.percentSetting;
+        power.emit('change');
+      },
+    } },
+  });
+  const update = api.matter.updateAccessoryState;
+  api.matter.updateAccessoryState = async (uuid, cluster, attributes) => {
+    await update(uuid, cluster, attributes);
+    const handlers = calls.registered[0].descriptors[0].handlers.fanControl;
+    if (Object.hasOwn(attributes, 'fanMode')) await handlers.fanModeChange({ fanMode: attributes.fanMode });
+    if (Object.hasOwn(attributes, 'percentSetting')) await handlers.percentSettingChange({ percentSetting: attributes.percentSetting });
+  };
+  await bridge.addAccessory(accessory);
+  const descriptor = calls.registered[0].descriptors[0];
+  const native = states.get(descriptor.UUID).fanControl;
+  assert.equal(native.percentCurrent, 100);
+  assert.equal(physicalWrites, 0);
+  // Native FanControl applies the requested setting before its plugin callback,
+  // but does not automatically replace the last reported physical speed/mode.
+  native.percentSetting = 33;
+  await descriptor.handlers.fanControl.percentSettingChange({ percentSetting: 33 });
+  await flush(bridge);
+  assert.equal(native.percentSetting, 33);
+  assert.equal(native.percentCurrent, 33);
+  assert.equal(native.fanMode, 1);
+  assert.deepEqual(calls.updated.at(-1).attributes, { fanMode: 1, percentCurrent: 33 });
+  assert.equal(physicalWrites, 1, 'reflecting physical attributes must not issue another cloud command');
+  await bridge.close();
+});
+
+test('queued source synchronization waits for active commands and retains independent source observations', async () => {
+  const { bridge, calls, power, accessory, states } = fixture();
+  await bridge.addAccessory(accessory);
+  const descriptor = calls.registered[0].descriptors[0];
+  let releaseQueue;
+  bridge.enqueue(() => new Promise(resolve => { releaseQueue = resolve; }));
+  await Promise.resolve();
+  power.value = true;
+  power.emit('change');
+  await new Promise(resolve => setImmediate(resolve));
+  let finishCommand;
+  power.finishSet = callback => { finishCommand = callback; };
+  const command = descriptor.handlers.onOff.on();
+  // This observation has an independent origin while the native command's
+  // driver request is outstanding; it must survive the suppressed command echo.
+  power.value = false;
+  power.emit('change');
+  releaseQueue();
+  await bridge.queue;
+  assert.equal(calls.updated.length, 1, 'a queued mirror must not run while a command handler is active');
+  finishCommand();
+  await command;
+  states.get(descriptor.UUID).onOff.onOff = true;
+  await flush(bridge);
+  assert.deepEqual(calls.updated.at(-1).attributes, { onOff: false });
+  assert.equal(states.get(descriptor.UUID).onOff.onOff, false);
   await bridge.close();
 });
 

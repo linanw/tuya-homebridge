@@ -1,6 +1,6 @@
 # Metadata Sync v1 (implementation contract)
 
-This work is a feature candidate. The existing npm 2.6.2 release remains unchanged. Native Matter continues to control devices; the authenticated metadata service is a separate integration for the Mac HomeKit companion and compatible Matter controllers. It does not obtain Apple/Google private home information through Matter.
+This contract is implemented by plugin **2.7.0-beta.1**, published through npm's separate `beta` channel; stable `latest` remains **2.6.2**. Release availability is determined by the registry and matching GitHub pre-release. Native Matter continues to control devices; the authenticated metadata service is a separate integration for the Mac HomeKit companion and compatible Matter controllers. It does not obtain Apple/Google private home information through Matter. See [installation and single-device testing](SETUP.md).
 
 ## Transport
 
@@ -22,6 +22,12 @@ This work is a feature candidate. The existing npm 2.6.2 release remains unchang
 `GET /v1/capabilities` returns `{schemaVersion:1, serverId, sourceEpoch, revision, observedAt, sourceKind, available, roomsAvailable, capabilities:{read,renameDevice,moveDevice,renameRoom}, limitations}`. Identity, availability, revision and capability values match the cached snapshot; clients ignore unknown response fields.
 
 All reads and writes use the same server identity. Provider polling is performed by one coordinator, with coalesced refresh and a configurable interval of at least 60 seconds. Client polling consumes the cache only. Source failures must not be interpreted as empty homes, deleted rooms or an unassigned device.
+
+## Current beta provider capabilities
+
+The metadata service and cloud writes are disabled by default. With `metadataSync.allowWrites: true`, authoritative reads and explicit bindings, Smart Home PaaS supports `device.rename` and `room.rename`; Custom supports `device.rename` only and exposes no App room graph. PaaS sends name-only `PUT /v1.0/devices/{device_id}` or `PUT /v1.0/homes/{home_id}/rooms/{room_id}` requests. Actual project/account permissions remain subject to Tuya authorization and must be checked on the intended account; documentation verification alone is not a successful live write.
+
+`moveDevice` is **false** for both current providers. The protocol retains the operation shape for a future provider with a verified atomic move, but current clients must keep it disabled. POST-add semantics do not establish atomic movement, and PUT room-member replacement is prohibited. Room-name editing does not change membership. See [official API contracts and remaining verification](TUYA_API_CONTRACTS.md).
 
 ## Snapshot
 
@@ -96,7 +102,7 @@ Receipt shape:
 - Three-way compare each field against the last agreed baseline. One-sided changes may propagate automatically; equal changes update the baseline; divergent changes require explicit conflict resolution. No baseline, incomplete room data, missing binding or unsupported capability means no write.
 - Incomplete room data blocks room operations, but does not block device-name synchronization when names are authoritative. Custom projects with no App home/room graph can explicitly bind a selected HomeKit home to the server for device-name-only synchronization.
 - A user may explicitly resolve an initial or divergent conflict by selecting the exact source/target value. That authorizes one guarded operation against freshly read snapshots, subject to the target's capabilities; automatic synchronization never writes without a baseline. Create or advance the baseline only after both sides confirm the chosen value, and never retry an uncertain receipt automatically.
-- Only advance a baseline after both sides are authoritatively confirmed. Preserve drafts on conflict. A new epoch discards pending commands and requires a fresh snapshot before any new write.
+- Only advance a baseline after both sides are authoritatively confirmed. Preserve drafts on conflict. A new epoch invalidates old pending intent and requires a fresh snapshot before any new write; preserve its uncertainty ledger and never replay it automatically.
 - Mac Catalyst HomeKit requires signing, entitlement and user home permission. The app must remain running and the Mac awake; do not claim synchronization continues after quit/sleep. Other controllers need their own supported metadata adapter; ordinary Matter pairing does not grant their private room graph.
 
 ## Provider contract (Node, internal only)

@@ -7,12 +7,16 @@ on:
   workflow_dispatch:
     inputs:
       tag:
-        description: 'Existing stable version tag, for example v2.6.1'
+        description: 'Existing version tag, for example v2.6.2 or v2.7.0-beta.1'
         required: true
         type: string
 
 permissions:
   contents: write
+
+defaults:
+  run:
+    shell: bash
 
 concurrency:
   group: release-${{ inputs.tag || github.ref_name }}
@@ -41,8 +45,12 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          release_args=(--prerelease=false --latest=true)
+          if [[ "$(node -p "require('./package.json').version.includes('-')")" == true ]]; then
+            release_args=(--prerelease=true --latest=false)
+          fi
           if gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/tuya-release-notes.md" --draft=false --prerelease=false
+            gh release edit "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/tuya-release-notes.md" --draft=false "${release_args[@]}"
           else
-            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/tuya-release-notes.md" --latest
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --title "$RELEASE_TAG" --notes-file "$RUNNER_TEMP/tuya-release-notes.md" "${release_args[@]}"
           fi

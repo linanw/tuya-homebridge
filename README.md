@@ -9,7 +9,9 @@ A Homebridge plugin maintained by linanw for controlling Tuya devices through HA
 
 ## What's New
 
-Development preview: [Mac companion and metadata sync](docs/metadata-sync/SETUP.md), with [MatterDesk and MatterCamViewer integration](https://github.com/linanw/MatterDesk/pull/1). The feature branches include an opt-in metadata service and companion adapters. PaaS room/name reads and Custom device-name writes have different capabilities; full bidirectional Tuya room writes remain unavailable. Actual accounts and devices require runtime validation. This preview is not included in npm 2.6.2.
+**2.7.0-beta.1** adds an opt-in [metadata service and Mac companion](docs/metadata-sync/SETUP.md), with [MatterDesk 0.7.0-beta.1 and MatterCamViewer 2.5.0-beta.1 integration](https://github.com/linanw/MatterDesk/blob/matterdesk-v0.7.0-beta.1/docs/TUYA_METADATA_SYNC.md). PaaS supports device-name and room-name writes when the administrator enables `allowWrites`; Custom supports device-name writes only. Moving a device between Tuya rooms remains disabled. API contracts are documented, but real account permissions and devices still need validation.
+
+The beta is a separate test channel: npm publication uses `--tag beta`, while `latest` remains **2.6.2**. Check the registry and matching GitHub pre-release for availability; test packages are being prepared and are not claimed to be uploaded by this document.
 
 Read the [changelog](CHANGELOG.md) and [GitHub Releases](https://github.com/linanw/tuya-homebridge/releases) for version details and upgrade notes.
 
@@ -48,6 +50,24 @@ homebridge -U /path/to/local/homebridge-storage
 ```
 
 Replace the storage path with your existing Homebridge directory containing `config.json`, Tuya account settings, and pairing data. Keep the existing `TuyaPlatform` configuration alias and storage when updating. No separate `homebridge/` entry or custom plugin path is needed for an installed package.
+
+### Install or leave the metadata beta
+
+In Homebridge UI, open the plugin card's **⋮ → Manage Versions**, then select **beta / 2.7.0-beta.1** when it is listed. For CLI installs, use the same Node/npm installation or container that runs your Homebridge service:
+
+```sh
+npm install -g @linanw/homebridge-tuya-platform@beta
+# Pin this beta when reproducing a test:
+npm install -g @linanw/homebridge-tuya-platform@2.7.0-beta.1
+```
+
+Restart the existing Homebridge service with its existing storage. Keep the platform configuration, child bridge identity, Matter storage and pairings. To return to the stable channel:
+
+```sh
+npm install -g @linanw/homebridge-tuya-platform@latest
+```
+
+The metadata service starts disabled. Follow the [beta setup guide](docs/metadata-sync/SETUP.md) to configure its separate token through the Homebridge process environment and HTTPS for remote clients. Start with one explicitly bound device and reads before enabling cloud writes. The npm package contains the server and protocol docs; the Mac companion and optional Node adapter are fetched separately from the matching GitHub source tag.
 
 ### Configure your Tuya account
 
@@ -192,7 +212,7 @@ Unsupported services remain available through HomeKit. This includes heaters/HVA
 
 ### Publish release notes
 
-Add an English and Chinese entry to `CHANGELOG.md` matching `package.json`, commit the changes, and push the matching stable tag, such as `v2.6.1`. The release workflow runs the tests and publishes the corresponding GitHub Release. Homebridge UI reads that release body for **What's New / Notes** and the tagged changelog for its changelog view. npm publication is a separate step.
+Add an English and Chinese entry to `CHANGELOG.md` matching `package.json`, commit the changes, and push the matching tag. Use `v2.7.0-beta.1` for this beta and publish its npm package with `--tag beta`; do not move the stable `latest` tag from 2.6.2. The release workflow runs tests and prepares the corresponding GitHub pre-release. Homebridge UI reads that release body for **What's New / Notes** and the tagged changelog for its changelog view. npm publication and release-asset upload are separate steps.
 
 ## Tuya OpenApi Login Error Code
 

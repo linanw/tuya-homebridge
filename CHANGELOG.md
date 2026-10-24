@@ -4,19 +4,23 @@ Release notes are available in English and Simplified Chinese. Homebridge UI's *
 
 以下提供英文和简体中文更新说明。Homebridge 插件管理的 **What's New / 更新说明** 读取对应版本的 [GitHub Release](https://github.com/linanw/tuya-homebridge/releases)；后续 npm 包也会包含本更新日志。
 
-## Unreleased / 未发布
+## [2.7.0-beta.1] - 2026-10-24
 
 ### English
 
 - Add an opt-in, authenticated metadata service with source-scoped identities, conditional commands, persistent receipts and explicit provider capabilities.
-- Add a Mac Catalyst HomeKit companion and a MatterDesk metadata adapter for explicit bindings and conflict-aware synchronization. Keep device pairings, Matter endpoints and existing controller aliases intact.
-- PaaS names/rooms can be read; Custom device-name writes require opt-in. Tuya room writes remain disabled pending a verified API. Actual Mac authorization and the user's local MatterDesk integration require further validation. See the [preview setup](docs/metadata-sync/SETUP.md).
+- Add a Mac Catalyst HomeKit companion and shared MatterDesk/MatterCamViewer integration for explicit bindings and conflict-aware synchronization. Keep device pairings, Matter endpoints and existing controller aliases intact.
+- Add opt-in device renaming for PaaS and Custom projects and room renaming for PaaS, using documented Tuya APIs. Device moves remain disabled because an incremental move contract has not been verified. Tuya API permissions and physical account/device behavior still require runtime validation. See the [beta setup](docs/metadata-sync/SETUP.md).
+- Coalesce native command echoes while retaining physical-state reconciliation, including fan current speed. Verify both supported Node versions, the native Matter runtime, Mac Catalyst compilation and both Linux applications.
+- Publish this version through the npm `beta` channel and a matching GitHub prerelease for Homebridge What's New. The stable `latest` channel remains on 2.6.2.
 
 ### 简体中文
 
 - 新增默认关闭、需要令牌的元数据服务，提供来源身份隔离、条件命令、持久化回执及明确的云端能力声明。
-- 新增 Mac Catalyst HomeKit 伴侣与 MatterDesk 元数据适配器，通过明确绑定和冲突处理执行同步，保留设备配对、Matter 端点及原有控制器别名。
-- PaaS 支持名称及房间读取；Custom 设备名称写回需要单独开启。涂鸦房间写接口未核实前保持禁用，Mac 实际授权及用户本地 MatterDesk 接入仍需验证。详见[预览配置](docs/metadata-sync/SETUP.md)。
+- 新增 Mac Catalyst HomeKit 伴侣与 MatterDesk/MatterCamViewer 共享接入，通过明确绑定和冲突处理执行同步，保留设备配对、Matter 端点及原有控制器别名。
+- 使用官方文档明确的接口，支持单独开启 PaaS/Custom 设备改名及 PaaS 房间改名。单设备增量移房语义尚未核实，保持禁用。真实涂鸦账号权限与设备行为仍需运行验证。详见[测试版配置](docs/metadata-sync/SETUP.md)。
+- 合并原生命令自身的状态回声，保留风扇当前速度等物理状态回流；验证受支持 Node 版本、原生 Matter、Mac Catalyst 及两个 Linux 应用。
+- 通过 npm `beta` 渠道发布，并提供对应 GitHub 预发布供 Homebridge 显示更新说明；稳定 `latest` 渠道保持 2.6.2。
 
 ## [2.6.2] - 2026-10-24
 

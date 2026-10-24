@@ -9,7 +9,9 @@
 
 ## What's New / 更新日志
 
-开发预览：[Mac 伴侣与元数据同步](docs/metadata-sync/SETUP.md)，以及 [MatterDesk 和 MatterCamViewer 接入](https://github.com/linanw/MatterDesk/pull/1)。功能分支提供可选元数据服务与伴侣适配器；PaaS 可读房间及名称，Custom 可选择开启设备名称写回。完整涂鸦房间双向写入仍不可用，真实账号和设备还需运行验证。本预览尚未包含在 npm 2.6.2 中。
+**2.7.0-beta.1** 提供可选的[元数据服务与 Mac 伴侣](docs/metadata-sync/SETUP.md)，配合 [MatterDesk 0.7.0-beta.1 和 MatterCamViewer 2.5.0-beta.1](https://github.com/linanw/MatterDesk/blob/matterdesk-v0.7.0-beta.1/docs/TUYA_METADATA_SYNC.md) 测试。PaaS 在管理员开启 `allowWrites` 后可写设备名和房间名；Custom 仅支持设备名写回。移动设备到其他涂鸦房间仍禁用。接口文档已经核实，真实账号权限与设备行为仍需联调。
+
+这是独立 beta 测试通道：npm 使用 `--tag beta` 发布，`latest` 保持 **2.6.2**。版本是否可安装以 npm 和对应 GitHub 预发布页为准；测试包正在准备，本文不表示附件已经上传。
 
 完整版本说明和升级记录请查看 [CHANGELOG.md](CHANGELOG.md) 与 [GitHub Releases](https://github.com/linanw/tuya-homebridge/releases)。
 
@@ -32,6 +34,24 @@
 | Matter | Homebridge 2.4 或更高版本 |
 
 Tuya 设备的控制和状态通知仍依赖涂鸦云服务。启用 Matter 不会将这些设备转换为完全离线的本地设备，也不会让设备本身获得原生 Matter 固件。
+
+## 安装 beta 与返回稳定版
+
+在 Homebridge UI 的插件卡片中打开 **⋮ → 管理版本**，选择列出的 **beta / 2.7.0-beta.1**。CLI 必须在实际运行 Homebridge 的同一套 Node/npm 环境或容器中执行：
+
+```sh
+npm install -g @linanw/homebridge-tuya-platform@beta
+# 复现本轮测试时可固定版本：
+npm install -g @linanw/homebridge-tuya-platform@2.7.0-beta.1
+```
+
+随后重启现有 Homebridge 服务，保留配置、子桥身份、存储和配对。返回稳定通道使用：
+
+```sh
+npm install -g @linanw/homebridge-tuya-platform@latest
+```
+
+元数据服务默认关闭。按[联调指南](docs/metadata-sync/SETUP.md)将独立令牌配置到 Homebridge 服务进程环境；跨机器访问使用受客户端信任的 HTTPS。先选一个设备完成读取、绑定，再决定是否开启写入。npm 包包含服务与协议文档，Mac 伴侣和可选 Node 适配器需从对应 GitHub 标签另外获取。
 
 ## 安装与账户配置
 

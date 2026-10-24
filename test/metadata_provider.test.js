@@ -333,22 +333,23 @@ test('Custom rename uses only the documented iot-03 PUT name body and does not c
   ]]);
 });
 
-test('writes are disabled by default and PaaS does not claim an unverified rename endpoint', async () => {
-  const custom = fixture();
-  const customSnapshot = await custom.provider.read();
-  assert.equal(customSnapshot.capabilities.renameDevice, false);
-  await assert.rejects(custom.provider.apply({
-    type: 'device.rename', targetId: customSnapshot.devices[0].id, name: 'New name',
-  }), assertCode('unsupported_operation'));
-  assert.equal(custom.state.writes.length, 0);
-  const paas = fixture({ projectType: '2', allowWrites: true });
-  simplePaasGraph(paas.state, [{ id: 'private-device-1' }]);
-  const paasSnapshot = await paas.provider.read();
-  assert.equal(paasSnapshot.capabilities.renameDevice, false);
-  await assert.rejects(paas.provider.apply({
-    type: 'device.rename', targetId: paasSnapshot.devices[0].id, name: 'New name',
-  }), assertCode('unsupported_operation'));
-  assert.equal(paas.state.writes.length, 0);
+test('device and room writes are disabled by default for both project types', async () => {
+  for (const projectType of ['1', '2']) {
+    const { provider, state } = fixture({ projectType });
+    if (projectType === '2') simplePaasGraph(state, [{ id: 'private-device-1' }]);
+    const snapshot = await provider.read();
+    assert.equal(snapshot.capabilities.renameDevice, false);
+    assert.equal(snapshot.capabilities.renameRoom, false);
+    assert.equal(snapshot.limitations.renameDevice, 'writes_disabled');
+    if (projectType === '2') assert.equal(snapshot.limitations.renameRoom, 'writes_disabled');
+    for (const type of ['device.rename', 'room.rename']) {
+      await assert.rejects(provider.apply({
+        type, targetId: type === 'device.rename' ? snapshot.devices[0].id : snapshot.rooms[0]?.id,
+        name: 'New name',
+      }), assertCode('unsupported_operation'));
+    }
+    assert.equal(state.writes.length, 0);
+  }
 });
 
 test('room writes are unsupported and unknown targets cannot issue arbitrary device mutations', async () => {
@@ -419,5 +420,163 @@ test('permission failures and ambiguous writes return safe codes without retries
     }), assertCode('write_uncertain'));
     assert.equal(state.writes.length, 1, 'uncertain writes must never be automatically retried');
     assert.ok(!JSON.stringify(state.logs).includes(PRIVATE_VALUE));
+  }
+});
+
+test('PaaS rename uses the documented name-only device and home-scoped room endpoints', async () => {
+  const rawId = 'private-device/encoded?part';
+  const rawHome = 'private-home/encoded?part';
+  const rawRoom = 'private-room/encoded?part';
+  const { provider, state } = fixture({ projectType: '2', allowWrites: true, records: [{ id: rawId, name: 'Original' }] });
+  const base = `/v1.0/homes/${encodeURIComponent(rawHome)}`;
+  state.replies.set(`/v1.0/users/${RAW_UID}/homes`, reply([{ id: rawHome, name: 'Home' }]));
+  state.replies.set(`${base}/devices`, reply([{ id: rawId }]));
+  state.replies.set(`${base}/rooms`, reply([{ id: rawRoom, name: 'Room' }]));
+  state.replies.set(`${base}/rooms/${encodeURIComponent(rawRoom)}/devices`, reply([{ id: rawId }]));
+  const snapshot = await provider.read();
+  assert.deepEqual(snapshot.capabilities, { read: true, renameDevice: true, moveDevice: false, renameRoom: true });
+  assert.equal(snapshot.limitations.renameDevice, undefined);
+  assert.equal(snapshot.limitations.renameRoom, undefined);
+  assert.equal(snapshot.limitations.moveDevice, 'no_verified_incremental_room_move');
+  for (const [type, targetId, name] of [
+    ['device.rename', snapshot.devices[0].id, '书房 💡 Cafe\u0301'],
+    ['room.rename', snapshot.rooms[0].id, '  新房间 💡  '],
+  ]) assert.equal(await provider.apply({ type, targetId, name }), undefined);
+  assert.deepEqual(state.writes, [
+    ['put', `/v1.0/devices/${encodeURIComponent(rawId)}`, null, { name: '书房 💡 Cafe\u0301' }],
+    ['put', `${base}/rooms/${encodeURIComponent(rawRoom)}`, null, { name: '  新房间 💡  ' }],
+  ]);
+  assert.equal((await provider.read()).devices[0].name, 'Original', 'a PUT acknowledgement must not alter the authoritative graph');
+  publicGraphOnly(snapshot, [rawId, rawHome, rawRoom]);
+  assert.ok(!JSON.stringify(state.logs).includes(PRIVATE_VALUE));
+});
+
+test('PaaS device names remain writable after partial room failure but stale room authority is cleared', async () => {
+  const { provider, state } = fixture({ projectType: '2', allowWrites: true });
+  simplePaasGraph(state, [{ id: 'private-device-1' }]);
+  const before = await provider.read();
+  assert.equal(before.capabilities.renameRoom, true);
+  state.replies.set('/v1.0/homes/private-home-1/rooms/private-room-1/devices', { success: false, code: 1106, msg: PRIVATE_VALUE });
+  const partial = await provider.read();
+  assert.equal(partial.available, true);
+  assert.equal(partial.roomsAvailable, false);
+  assert.equal(partial.capabilities.renameDevice, true);
+  assert.equal(partial.capabilities.renameRoom, false);
+  assert.equal(partial.limitations.renameRoom, 'permission_denied');
+  assert.equal(partial.devices[0].roomStatus, 'unknown');
+  await assert.rejects(provider.apply({ type: 'room.rename', targetId: before.rooms[0].id, name: 'Do not send' }), assertCode('source_unavailable'));
+  await provider.apply({ type: 'device.rename', targetId: partial.devices[0].id, name: 'Name remains usable' });
+  assert.deepEqual(state.writes, [['put', '/v1.0/devices/private-device-1', null, { name: 'Name remains usable' }]]);
+  publicGraphOnly(partial, ['private-device-1', 'private-home-1', 'private-room-1']);
+  assert.ok(!JSON.stringify(state.logs).includes(PRIVATE_VALUE));
+});
+
+test('PaaS rename requires current read authority and never accepts raw IDs or arbitrary target paths', async () => {
+  const { provider, state } = fixture({ projectType: '2', allowWrites: true });
+  for (const type of ['device.rename', 'room.rename']) {
+    await assert.rejects(provider.apply({ type, targetId: 'unread-target', name: 'Name' }), assertCode('source_unavailable'));
+  }
+  simplePaasGraph(state, [{ id: 'private-device-1' }]);
+  const snapshot = await provider.read();
+  const other = fixture({ projectType: '2', allowWrites: true, identitySalt: 'b'.repeat(64) });
+  simplePaasGraph(other.state, [{ id: 'private-device-1' }]);
+  const otherSnapshot = await other.provider.read();
+  for (const [type, targetId] of [
+    ['device.rename', 'private-device-1'], ['device.rename', '../../devices/private-device-1'],
+    ['room.rename', 'private-room-1'], ['room.rename', '/v1.0/homes/private-home-1/rooms/private-room-1'],
+    ['device.rename', otherSnapshot.devices[0].id], ['room.rename', otherSnapshot.rooms[0].id],
+    ['room.rename', snapshot.devices[0].id], ['device.rename', snapshot.rooms[0].id],
+  ]) await assert.rejects(provider.apply({ type, targetId, name: 'Name' }), assertCode('wrong_source'));
+  await assert.rejects(provider.apply({ type: 'device.rename', targetId: snapshot.devices[0].id, name: 'Name', path: '/anything' }), assertCode('invalid_request'));
+  await assert.rejects(provider.apply({ type: 'device.move', targetId: snapshot.devices[0].id, roomId: snapshot.rooms[0].id }), assertCode('unsupported_operation'));
+  state.detailReply = () => { throw new Error(PRIVATE_VALUE); };
+  const failed = await provider.read();
+  assert.equal(failed.capabilities.renameDevice, false);
+  assert.equal(failed.capabilities.renameRoom, false);
+  for (const [type, targetId] of [['device.rename', snapshot.devices[0].id], ['room.rename', snapshot.rooms[0].id]]) {
+    await assert.rejects(provider.apply({ type, targetId, name: 'Name' }), assertCode('source_unavailable'));
+  }
+  assert.equal(state.writes.length, 0);
+});
+
+test('room rename resolves identical raw room IDs through their own home mappings', async () => {
+  const records = [{ id: 'private-device-a', name: 'A' }, { id: 'private-device-b', name: 'B' }];
+  const { provider, state } = fixture({ projectType: '2', allowWrites: true, records });
+  state.replies.set(`/v1.0/users/${RAW_UID}/homes`, reply(['a', 'b'].map(home => ({ id: `private-home-${home}`, name: 'Same home' }))));
+  for (const home of ['a', 'b']) {
+    const base = `/v1.0/homes/private-home-${home}`;
+    state.replies.set(`${base}/devices`, reply([{ id: `private-device-${home}` }]));
+    state.replies.set(`${base}/rooms`, reply([{ id: 'private-shared-room', name: 'Same room' }]));
+    state.replies.set(`${base}/rooms/private-shared-room/devices`, reply([{ id: `private-device-${home}` }]));
+  }
+  const snapshot = await provider.read();
+  for (const device of snapshot.devices) await provider.apply({ type: 'room.rename', targetId: device.roomId, name: `Room for ${device.name}` });
+  assert.deepEqual(state.writes.map(write => write[1]).sort(), [
+    '/v1.0/homes/private-home-a/rooms/private-shared-room', '/v1.0/homes/private-home-b/rooms/private-shared-room',
+  ]);
+  publicGraphOnly(snapshot, ['private-home-a', 'private-home-b', 'private-shared-room', ...records.map(record => record.id)]);
+});
+
+test('inventory changes invalidate room write authority and removed PaaS devices cannot be renamed', async () => {
+  const { provider, state } = fixture({ projectType: '2', allowWrites: true });
+  simplePaasGraph(state, [{ id: 'private-device-1' }]);
+  const snapshot = await provider.read();
+  state.managed = [];
+  await assert.rejects(provider.apply({ type: 'room.rename', targetId: snapshot.rooms[0].id, name: 'No stale room' }), assertCode('wrong_source'));
+  await assert.rejects(provider.apply({ type: 'room.rename', targetId: snapshot.rooms[0].id, name: 'No cached authority' }), assertCode('source_unavailable'));
+  await assert.rejects(provider.apply({ type: 'device.rename', targetId: snapshot.devices[0].id, name: 'No stale device' }), assertCode('wrong_source'));
+  assert.equal(state.writes.length, 0);
+});
+
+test('an inventory change during room reads cannot publish authoritative names or room write mappings', async () => {
+  const { provider, state } = fixture({ projectType: '2', allowWrites: true });
+  simplePaasGraph(state, [{ id: 'private-device-1' }]);
+  const before = await provider.read();
+  state.getReply = path => {
+    if (path.endsWith('/rooms/private-room-1/devices')) state.managed = [];
+    return state.replies.get(path);
+  };
+  const after = await provider.read();
+  assert.equal(after.available, false);
+  assert.equal(after.roomsAvailable, false);
+  assert.equal(after.capabilities.renameRoom, false);
+  assert.deepEqual(after.devices, []);
+  await assert.rejects(provider.apply({ type: 'room.rename', targetId: before.rooms[0].id, name: 'Never send' }), assertCode('source_unavailable'));
+  assert.equal(state.writes.length, 0);
+});
+
+test('PaaS device and room rename preserve full valid Unicode and reject invalid names before any write', async () => {
+  const { provider, state } = fixture({ projectType: '2', allowWrites: true });
+  simplePaasGraph(state, [{ id: 'private-device-1' }]);
+  const snapshot = await provider.read();
+  for (const [type, targetId] of [['device.rename', snapshot.devices[0].id], ['room.rename', snapshot.rooms[0].id]]) {
+    for (const name of ['', ' \t ', 'bad\u0000name', 'bad\u007fname', '\ud800', 'x'.repeat(51), '💡'.repeat(41)]) {
+      await assert.rejects(provider.apply({ type, targetId, name }), assertCode('invalid_request'));
+    }
+    for (const name of ['房'.repeat(50), '💡'.repeat(40), '  Cafe\u0301  ']) {
+      await provider.apply({ type, targetId, name });
+      assert.deepEqual(state.writes.at(-1)[3], { name });
+    }
+  }
+  assert.equal(state.writes.length, 6);
+});
+
+test('PaaS permissions and uncertain acknowledgements stay safe, perform one request and never retry', async () => {
+  for (const [expected, writeReply] of [
+    ['permission_denied', () => ({ success: false, code: 1106, msg: PRIVATE_VALUE })],
+    ['permission_denied', () => { throw Object.assign(new Error(PRIVATE_VALUE), { response: { status: 403, data: PRIVATE_VALUE } }); }],
+    ['write_uncertain', () => { throw Object.assign(new Error(PRIVATE_VALUE), { code: 'ETIMEDOUT' }); }],
+    ['write_uncertain', () => ({ success: true, result: false })],
+    ['write_uncertain', () => ({ result: true })],
+  ]) {
+    for (const type of ['device.rename', 'room.rename']) {
+      const { provider, state } = fixture({ projectType: '2', allowWrites: true });
+      simplePaasGraph(state, [{ id: 'private-device-1' }]);
+      const snapshot = await provider.read();
+      state.writeReply = writeReply;
+      await assert.rejects(provider.apply({ type, targetId: type === 'room.rename' ? snapshot.rooms[0].id : snapshot.devices[0].id, name: 'Name' }), assertCode(expected));
+      assert.equal(state.writes.length, 1);
+      assert.ok(!JSON.stringify(state.logs).includes(PRIVATE_VALUE));
+    }
   }
 });

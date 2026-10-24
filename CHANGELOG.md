@@ -4,6 +4,26 @@ Release notes are available in English and Simplified Chinese. Homebridge UI's *
 
 以下提供英文和简体中文更新说明。Homebridge 插件管理的 **What's New / 更新说明** 读取对应版本的 [GitHub Release](https://github.com/linanw/tuya-homebridge/releases)；后续 npm 包也会包含本更新日志。
 
+## [2.7.0-beta.2] - 2026-10-24
+
+### English
+
+- Fix query signing in both API clients: sort keys, send RFC 3986-encoded values and decode the canonical URL once, following the [official SDK](https://github.com/tuya/tuya-connector-nodejs/blob/master/src/core/client.ts).
+- Correct comma-separated batch `device_ids` signing that can cause `1004 sign invalid`. The defect also exists in 2.6.2 and is independent of metadata sync.
+- Add static error `operation` labels such as `account login`, `associated device list` and `batch device functions`, without device IDs or URLs.
+- For `1004`, upgrade to this beta and restart Homebridge, preserving credentials, storage and pairings. If it persists, share sanitized operation/error-code lines and version details.
+- Offer this fix through `beta` first; stable `latest` stays at 2.6.2. Desktop AppImages remain MatterDesk 0.7.0-beta.1 and MatterCamViewer 2.5.0-beta.1.
+- Offline regression tests cover sorting, encoding and batch IDs; live Tuya validation remains pending.
+
+### 简体中文
+
+- 修复两种 Tuya API 客户端的 query 签名：按[官方 SDK](https://github.com/tuya/tuya-connector-nodejs/blob/master/src/core/client.ts)规则对键排序，以 RFC 3986 编码传输，对 canonical URL 解码一次。
+- 修正逗号分隔的批量 `device_ids` 签名可能触发 `1004 sign invalid` 的问题。此缺陷在 2.6.2 中也已存在，与元数据同步无关。
+- 错误中新增静态 `operation` 标签，如 `account login`、`associated device list`、`batch device functions`，不包含设备 ID 或 URL。
+- 遇到 `1004` 时先升级本 beta 并重启 Homebridge，保留凭据、存储与配对。若仍报错，提供脱敏的 operation/错误码日志及版本信息。
+- 本修复先进入 `beta`，稳定 `latest` 保持 2.6.2。桌面 AppImage 仍为 MatterDesk 0.7.0-beta.1、MatterCamViewer 2.5.0-beta.1。
+- 离线回归覆盖排序、编码及批量 ID；真实涂鸦联调仍待验证。
+
 ## [2.7.0-beta.1] - 2026-10-24
 
 ### English

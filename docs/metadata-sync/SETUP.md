@@ -1,25 +1,32 @@
-# Mac and MatterDesk metadata sync preview / 元数据同步预览
+# Metadata sync beta / 元数据同步 beta
 
-This feature branch adds a separate authenticated metadata service, a Mac Catalyst HomeKit companion, and a MatterDesk controller adapter. It is not part of the published npm **2.6.2** package. Ordinary Matter pairing continues to provide device control; it does not expose Apple Home or Google Home private room and alias databases.
+This guide targets plugin **2.7.0-beta.1**, MatterDesk **0.7.0-beta.1** and MatterCamViewer **2.5.0-beta.1**. The beta uses npm's `beta` dist-tag; `latest` remains **2.6.2**. GitHub test packages are being prepared: use the matching pre-release only after its expected files and checksums appear. A stable 2.6.2 installation does not include this metadata service.
 
-本功能分支新增独立的元数据服务、Mac Catalyst HomeKit 伴侣 App 和 MatterDesk 控制器适配器，尚未包含在 npm **2.6.2** 中。普通 Matter 配对继续提供设备控制；家庭平台的私有房间和自定义名称需要另外授权的适配器读取。
+本指南对应插件 **2.7.0-beta.1**、MatterDesk **0.7.0-beta.1** 与 MatterCamViewer **2.5.0-beta.1**。beta 使用独立测试通道，正式版 `latest` 仍为 **2.6.2**。桌面测试包正在准备；以对应预发布页的实际附件和校验文件为准，不要将旧正式包当作本轮 beta。
 
-## Implemented provider capabilities / 实际云端能力
+Native Matter still provides device control. This authenticated service supplies names and rooms to separately authorized clients; Matter pairing alone does not grant Apple Home or Google Home private room/alias access.
 
-| Current project / 当前项目 | Read names / 读取名称 | Read Tuya app rooms / 读取 App 房间 | Write device name / 写回名称 | Move device / 移动设备 | Rename room / 修改房间名 |
-| --- | --- | --- | --- | --- | --- |
-| Smart Home PaaS | Yes / 支持 | Yes, subject to account/API permission / 取决于账号及 API 权限 | Disabled: write contract not verified / 接口未核实，禁用 | Disabled / 禁用 | Disabled / 禁用 |
-| Custom | Yes / 支持 | Unsupported: assets are not app rooms / assets 不等于 App 房间 | Opt-in / 可单独开启 | Disabled / 禁用 | Disabled / 禁用 |
+原生 Matter 继续负责设备控制。名称与房间通过独立授权的元数据服务同步，普通 Matter 配对不会授予 Apple Home 或 Google Home 私有家庭资料的访问权。
 
-The Mac can follow available Tuya names and explicitly mapped rooms in Apple Home. Bidirectional device-name sync is possible with a Custom project that permits the verified rename operation and has writes enabled. Full bidirectional room sync is **not implemented**: a documented, authorized Tuya delta room-write API is still required. No guessed replacement request is sent. A room-read permission failure preserves the last known room graph and disables room operations; it never means “move everything to the default room.”
+## 1. Install the plugin / 安装插件
 
-Mac 可将可读的涂鸦名称及明确映射的房间同步到 Apple Home。Custom 项目具有对应 API 权限并开启写入后，可使用设备名称双向同步。完整房间双向同步**尚未实现**，仍需要核实并获得涂鸦增量房间写入接口的权限。房间读取失败时保留旧数据并暂停房间操作，避免误判为未分房间。
+In Homebridge UI, open the plugin card's **⋮ → Manage Versions / 管理版本 → beta / 2.7.0-beta.1**. Alternatively, run this in the same Node/npm environment or container as the Homebridge service:
 
-## Homebridge service / Homebridge 服务
+```sh
+npm install -g @linanw/homebridge-tuya-platform@beta
+# Exact version for repeatable testing / 固定本轮版本：
+npm install -g @linanw/homebridge-tuya-platform@2.7.0-beta.1
+```
 
-Keep your existing Tuya account, bridge identity, storage and pairings. Add this object under the platform's existing `options`:
+Keep your existing Tuya account settings, Homebridge storage, child bridge identity and Matter pairings. Restart the existing service after updating. Return to the stable channel with `npm install -g @linanw/homebridge-tuya-platform@latest`; do not delete storage or re-pair merely to change package versions.
 
-保留现有涂鸦账号、桥接身份、存储和配对，在平台现有 `options` 中添加：
+保留现有账号配置、Homebridge 存储、子桥身份及 Matter 配对，更新后重启现有服务。需要退回正式版时安装 `@latest`，不要清空缓存或重新配对。恢复 2.6.2 后元数据服务不可用，已有普通 HAP / Matter 控制继续按稳定版能力运行。
+
+## 2. Start with read-only service access / 先开启只读服务
+
+Merge this object under the platform's existing `options`, preserving the surrounding account and bridge configuration:
+
+在现有平台的 `options` 中合并以下对象，保留账号和桥接配置：
 
 ```json
 {
@@ -34,39 +41,85 @@ Keep your existing Tuya account, bridge identity, storage and pairings. Add this
 }
 ```
 
-Generate a separate random access token, for example with `openssl rand -hex 32`, and set `TUYA_METADATA_TOKEN` in the environment of the **Homebridge service process**. An export in a different terminal does not change an already running service. Keep the token out of Git, URLs and logs. Restart the Tuya child bridge after changing its environment or settings. This token is unrelated to npm, Tuya access keys or Apple credentials.
+Generate a separate random bearer token locally, for example with `openssl rand -hex 32`, and place it in `TUYA_METADATA_TOKEN` in the **Homebridge service process environment**. A different terminal's export does not update an already running service. Restart the Tuya child bridge after changing its environment or settings. Enter this same token in the client's dedicated token field. Do not put the value in JSON, URLs, screenshots, logs or Git; it is unrelated to npm tokens, Tuya Access Secrets and Apple passwords.
 
-可用 `openssl rand -hex 32` 生成独立令牌，将 `TUYA_METADATA_TOKEN` 写入实际运行 **Homebridge 服务进程**的环境中。在另一个终端中临时 export 不会改变已启动的服务。修改后重启涂鸦子桥。令牌不要提交 Git 或放入 URL；它与 npm、涂鸦密钥和 Apple 账号无关。
+在本机生成独立随机令牌，并通过实际 **Homebridge 服务进程的环境**设置 `TUYA_METADATA_TOKEN`。其他终端临时 export 不会更新已经运行的服务。修改后重启涂鸦子桥，在客户端的独立令牌框中输入相同值。令牌不要写入 JSON、URL、截图、日志或 Git，也不要使用 npm token、涂鸦 Access Secret 或 Apple 密码代替。
 
-For a Mac or MatterDesk on another machine, configure HTTPS with a certificate trusted by that client. Either put an administrator-managed HTTPS reverse proxy in front of the loopback service, or set a LAN bind address and both `tlsCertPath` and `tlsKeyPath` to readable PEM files. Binding beyond exact loopback without TLS is rejected. Clients do not bypass certificate validation or follow redirects. No public internet exposure is required.
+For a client on another machine, use HTTPS with a certificate trusted by that client. Either configure an administrator-managed HTTPS reverse proxy in front of this loopback service, or bind a LAN address with readable PEM files set through **both** `tlsCertPath` and `tlsKeyPath`. Remote plaintext HTTP is rejected. Clients validate certificates and reject redirects. No public internet exposure is needed.
 
-Mac 或 MatterDesk 在另一台电脑时，需要使用客户端信任的 HTTPS 证书。可以自行配置 HTTPS 反向代理转发至回环服务，也可以设置局域网监听地址及 `tlsCertPath`、`tlsKeyPath` 两个 PEM 文件路径。非回环地址不允许明文 HTTP。客户端保留证书校验并拒绝跳转，无需将服务开放到公网。
+跨机器访问必须使用客户端信任的 HTTPS。可使用管理员管理的 HTTPS 反向代理转发到回环服务，或设置局域网监听地址，并同时配置可读的 `tlsCertPath`、`tlsKeyPath` PEM 文件。非回环地址拒绝明文 HTTP；客户端不会跳过证书验证或跟随重定向，无需开放公网。
 
-Only devices already managed by this plugin are exported. Disabled devices and unsupported drivers are excluded. The coordinator polls Tuya once for all clients, at least 60 seconds apart for scheduled polls; client snapshot reads use the cache. Selected Tuya MQTT metadata notifications invalidate this cache with burst throttling. Power/speed updates keep their existing control path.
+Only devices already managed by this plugin are exported. Disabled devices and unsupported drivers are excluded. One coordinator polls Tuya for all clients; scheduled polling is at least 60 seconds apart. Client snapshot reads consume the cache. Supported MQTT metadata notifications trigger throttled refreshes; power and speed updates keep their existing control path.
 
-只导出本插件实际管理的设备，排除已禁用设备及不支持的驱动。多个客户端共用一次云端轮询；计划轮询间隔至少 60 秒，客户端读取缓存。已确认类型的 MQTT 元数据通知会节流刷新。开关、速度等控制继续走原有逻辑。
+只导出插件实际管理的设备，排除已禁用设备和不支持的驱动。多个客户端共用一次云端轮询；计划轮询间隔至少 60 秒。客户端读取缓存，已支持的 MQTT 元数据通知节流刷新；开关、速度等控制沿用原有路径。
 
-## Companion and controller / 伴侣与控制器
+### Docker Homebridge
 
-- [Mac companion build and setup / Mac 构建与使用](../../companions/mac/README.md)
-- [MatterDesk and MatterCamViewer integration / 两个 Qt App 接入](https://github.com/linanw/MatterDesk/pull/1)
-- [Optional Node controller client / 可选 Node 控制器客户端](../../integrations/matterdesk/README.md)
-- [Metadata Sync v1 protocol / 协议](PROTOCOL.md)
+Add the token to the **existing container's** environment. Keep its existing image, networking and persistent volumes. In Compose, add this under your existing service (use its actual name):
 
-Enable following/sync only after selecting the source and local home and explicitly binding the devices and rooms. Automatic sync requires a previously agreed baseline. Divergent changes appear as a conflict; a user can explicitly choose which current value to keep. A source epoch change requires a fresh read. A queued HTTP receipt is not a successful cloud write: only an authoritative read confirming the desired value can advance the baseline. Uncertain writes are not automatically retried.
+在**已有容器**的环境中加入令牌，保留原镜像、网络和持久卷。Compose 中仅添加以下字段，服务名按现有配置填写：
 
-先选择来源和本地家庭，并明确绑定设备、房间，再开启跟随或同步。自动同步需要已确认的基线。两端同时改成不同值时展示冲突，由用户选择保留哪一端。服务重新启动后需要重新读取数据。排队回执不代表写入成功；只有双方读取确认目标值后才更新基线，结果未知时不会自动重发。
+```yaml
+services:
+  homebridge:
+    environment:
+      TUYA_METADATA_TOKEN: "${TUYA_METADATA_TOKEN:?Set TUYA_METADATA_TOKEN in the Compose environment}"
+```
 
-The Mac companion needs HomeKit entitlement, valid signing and the user's home permission. It must remain running and the Mac awake. The companion integration for **MatterDesk and MatterCamViewer** is maintained in [linanw/MatterDesk](https://github.com/linanw/MatterDesk), using the same HTTP contract. Its existing local aliases, room store, Mijia camera metadata, controller fabric and pairings must be preserved. Integration builds and account/device checks must pass before claiming runtime compatibility. There is no generic API for synchronizing every Matter hub's private home database; additional hubs need their own authorized metadata adapter. Google Home's private room graph is not covered by the Mac HomeKit app.
+Generate a separate token with `openssl rand -hex 32`, save it in the Compose environment or a protected `.env`, then run `docker compose up -d <service>` to recreate that service. A restart alone does not add environment variables. This value is separate from `NPM_TOKEN` and Tuya credentials.
 
-Mac 伴侣需要 HomeKit entitlement、有效签名和家庭数据授权，并需保持 App 运行及 Mac 唤醒。**MatterDesk 和 MatterCamViewer** 的共享协议接入维护在 [linanw/MatterDesk](https://github.com/linanw/MatterDesk)，需通过实际构建及账号、设备联调后才能确认运行时兼容。必须保留本地别名、房间存储、米家摄像头元数据、Matter fabric 与配对。其他 Matter 中枢需要各自授权的元数据适配器，Mac HomeKit App 不覆盖 Google Home 私有房间数据。
+生成令牌后写入 Compose 环境或受保护的 `.env`，用 `docker compose up -d <服务名>` 重建该服务；单纯重启旧容器不会增加环境变量。同步令牌与 `NPM_TOKEN`、涂鸦密钥各自独立。
 
-## Validation / 验证
+For a client on another computer, use normally trusted HTTPS. Direct TLS needs mounted certificate/key files, `metadataSync.host: "0.0.0.0"`, and both TLS paths set to **container paths**. Host networking uses the host's LAN address; bridge networking needs the corresponding TCP port published. Publishing a port cannot expose a service still bound to `127.0.0.1` inside a bridge-networked container. An existing HTTPS proxy can instead forward to a service it can reach. Preserve the Homebridge data volume and pairing files.
 
-Node tests cover the HTTP service, source normalization, conflict guards, persistent command receipts and metadata projection without changing endpoint identities. The Mac workflow builds for Mac Catalyst and runs the Foundation core tests. Neither proves real Apple Home authorization, Tuya account permissions, physical device pairing or integration with the user's local MatterDesk build. Those checks require the corresponding Mac, account, LAN and source checkout.
+跨机器连接使用客户端信任的 HTTPS。直接 TLS 需挂载证书/密钥，监听地址设为 `0.0.0.0`，TLS 路径填**容器内路径**；host 网络用宿主机局域网地址，bridge 网络映射相应 TCP 端口。容器内监听 `127.0.0.1` 时，仅增加端口映射无法让外部访问。已有 HTTPS 代理也可转发到它能够访问的服务。保留原 Homebridge 数据卷和配对文件。
 
-Homebridge 2.4's public metadata-cache API updates restored entries; a newly registered endpoint's cached UI name may lag its live standard `nodeLabel`. The integration preserves the full authoritative name in this metadata service and projects the live label independently, without resetting an endpoint or pairing to force a cache update.
+## 3. Connect one client and one device / 从一个客户端、一个设备开始
 
-Node 测试覆盖服务、来源归一化、冲突校验、持久化回执及保留端点身份的名称投影；Mac 工作流负责 Catalyst 编译和 Foundation 核心测试。它们不能替代 Apple Home 实际授权、涂鸦账号权限、真实配对和本地 MatterDesk 联调。
+- **MatterDesk:** use the `matterdesk-v0.7.0-beta.1` [pre-release](https://github.com/linanw/MatterDesk/releases/tag/matterdesk-v0.7.0-beta.1), then open **Settings → 涂鸦同步**.
+- **MatterCamViewer:** use the `mattercamviewer-v2.5.0-beta.1` [pre-release](https://github.com/linanw/MatterDesk/releases/tag/mattercamviewer-v2.5.0-beta.1), then use its independent **涂** entry. It remains a viewer for actual camera endpoints; this feature adds no Tuya camera driver.
+- **Mac HomeKit companion:** fetch and build the [companion at v2.7.0-beta.1](https://github.com/linanw/tuya-homebridge/blob/v2.7.0-beta.1/companions/mac/README.md). It needs valid signing, HomeKit entitlement and explicit user home access. No signed Mac installer is supplied here.
+- **Optional Node adapter:** fetch the [source at v2.7.0-beta.1](https://github.com/linanw/tuya-homebridge/blob/v2.7.0-beta.1/integrations/matterdesk/README.md). It is an integration library, not an OHF plugin or a desktop application.
 
-Homebridge 2.4 的公开元数据缓存接口仅更新已恢复的条目，新建端点的缓存界面名称可能落后于实时 `nodeLabel`。同步服务保留完整权威名称，实时标签独立更新，不通过重建端点或配对强制刷新缓存。
+The npm package includes this guide, the service and the [protocol](PROTOCOL.md), but **does not include `companions/` or `integrations/`**. Their GitHub links are intentional. Desktop beta assets are usable only when actually listed on the linked pre-release; source tags are the alternative for building locally.
+
+npm 包包含服务、本指南和协议，**不包含 `companions/`、`integrations/`**，请通过上方 GitHub 链接获取对应源码。桌面测试包仅在预发布页实际列出附件后可下载；也可从相应标签构建。
+
+1. Keep the existing OHF controller and Fabric directory for MatterDesk/MatterCamViewer. In the Mac app, authorize HomeKit and select one Apple home.
+2. Enter the metadata service URL and token. Check that the source is available and the latest authoritative observation is present. Select the explicit Tuya home, or the Custom device-name-only profile.
+3. Select one existing endpoint/accessory and confirm its source device binding. Native Matter `uniqueId` or a trustworthy unique HomeKit serial may suggest a match; missing or duplicate identities require explicit selection. Never match by similar names.
+4. Enable following and explicitly adopt the source value to establish a baseline. Confirm a Tuya name change appears on this one bound target before adding further bindings. Local HomeStore aliases and Mijia metadata remain independent.
+5. Map rooms explicitly before following room metadata. Unknown room data is not an unassigned room. The Mac app must remain running and the Mac awake; Qt clients must remain running and connected.
+
+先保留控制器与配对，连接服务并确认可用、具有权威观测，再明确选择家庭和一个设备。确认绑定、启用跟随并采用来源建立基线，先检查单设备显示，再扩展范围。本机别名与米家资料不触发云写入；房间必须明确映射。Mac 伴侣需保持运行和唤醒，Qt 客户端需保持运行并连接。
+
+## 4. Enable only supported writes / 再启用已支持的写入
+
+| Provider / 来源 | Read / 读取 | Device rename / 设备改名 | Room rename / 房间改名 | Device move / 设备移动 |
+| --- | --- | --- | --- | --- |
+| Smart Home PaaS | Names and App homes/rooms, subject to permission / 名称及 App 家庭、房间，取决于权限 | Opt-in / 可开启 | Opt-in when room reads are authoritative / 房间读取完整时可开启 | Disabled / 禁用 |
+| Custom | Device names; assets are not App rooms / 设备名，assets 不是 App 房间 | Opt-in / 可开启 | Unsupported / 不支持 | Unsupported / 不支持 |
+
+Set `metadataSync.allowWrites` to **true** and restart the Tuya bridge only when you want source writes. The client additionally requires the matching capability, a fresh source snapshot, explicit binding/baseline and confirmation of the edit. PaaS uses the documented name-only requests `PUT /v1.0/devices/{device_id}` and `PUT /v1.0/homes/{home_id}/rooms/{room_id}`, each with `{"name":"..."}`. Custom device-name writes use the separate IoT-03 API. See [verified API contracts and remaining account checks](TUYA_API_CONTRACTS.md).
+
+需要写回时，将 `metadataSync.allowWrites` 改为 **true** 并重启涂鸦桥。客户端仍需核对能力、权威观测、绑定、基线和草稿版本，明确确认后才写入。PaaS 已实现设备名称和房间名称的独立更新；Custom 仅设备名，不把 assets 当作 App 房间。接口文档核实不等于当前账号已获授权：权限不足、数据中心或关联账号不匹配时，操作会失败，不能算作同步成功。
+
+In the Qt panel, device-name and room-name drafts have separate confirmation actions. Room-name editing targets the selected device's explicitly bound source room; it does not rename a local HomeStore room. Start with one noncritical name edit, then confirm the authoritative value and the Tuya app before testing more bindings. The Mac companion uses its existing explicit room mappings and capability checks; this beta does not add a new Mac room editor.
+
+Qt 面板中的设备名与房间名分别编辑、分别确认。房间名只修改所选设备关联的来源房间，不修改本地 HomeStore 房间。先测试一个非关键名称，并在权威读取及涂鸦 App 中核对结果。Mac 伴侣沿用已有房间映射和能力检查，本轮未新增 Mac 房间编辑器。
+
+`moveDevice` remains **false** for both providers. The documented POST adds devices to a room but does not prove atomic reassignment from another room. The PUT membership API replaces the entire list and is prohibited for a single-device move. No remove-then-add workaround, room create/delete or whole-home replacement is performed. Full bidirectional room-membership synchronization remains unavailable.
+
+两个 provider 的 `moveDevice` 都保持 **false**。POST 添加设备尚未证实原子移房语义；PUT 房间成员接口是全量替换，禁止用于单设备移动。不会先移除再添加，也不会新建、删除房间或整屋覆盖；完整的房间归属双向同步仍不可用。
+
+Queued receipts are not success. Only authoritative readback matching the requested value confirms a write and advances a baseline. Stale/different edits preserve drafts for review. Timeouts and uncertain outcomes are never automatically retried, including after restart; read the latest state and resolve the existing receipt before another write.
+
+排队不代表成功。只有权威读回与目标一致才确认写入并更新基线。版本变化或冲突保留草稿，超时及未知结果在重启后也不会自动重发，需先读取现状并处理原回执。
+
+## Validation / 验证边界
+
+Offline Node/Qt tests and unsigned Mac Catalyst builds check protocol, guards, receipts, identity preservation and UI behavior. They do not prove live Tuya permissions, Apple Home authorization, home-LAN pairing, physical camera behavior or compatibility with every controller. Verify those on the intended account, device and client; no account secret needs to be shared in an issue or chat.
+
+Homebridge 2.4's public metadata-cache API updates restored entries; a newly registered endpoint's cached UI name may lag its live standard `nodeLabel`. The metadata service preserves full Unicode names and updates live labels without rebuilding endpoints or pairings. Native protocol label truncation must never overwrite the full cloud name.
+
+离线测试与无签名 Catalyst 构建覆盖协议及界面，不替代真实账号权限、家庭授权、局域网配对或物理设备验证。新建端点的 Homebridge 缓存名称可能暂时落后于实时 `nodeLabel`；完整名称保存在元数据服务中，不通过重建端点或重新配对强制更新，也不把截断标签反写云端。

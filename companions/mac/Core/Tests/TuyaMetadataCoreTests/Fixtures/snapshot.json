@@ -8,7 +8,7 @@
   "roomsAvailable": true,
   "sourceKind": "tuya-project-paas",
   "capabilities": {"read": true, "renameDevice": false, "moveDevice": false, "renameRoom": false},
-  "limitations": {"renameDevice": "unverified_tuya_device_write_contract", "moveDevice": "unverified_tuya_room_write_contract", "renameRoom": "unverified_tuya_room_write_contract"},
+  "limitations": {"renameDevice": "writes_disabled", "moveDevice": "no_verified_incremental_room_move", "renameRoom": "writes_disabled"},
   "homes": [{"id": "h_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "name": "Home"}],
   "rooms": [{"id": "r_cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc", "homeId": "h_bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "name": "Study"}],
   "devices": [{

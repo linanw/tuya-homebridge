@@ -16,6 +16,14 @@ and use this same contract directly through Qt Network. Live account/device
 interoperability still requires runtime validation. The Node handoff below is an
 explicit optional controller integration port, not a supplied OHF method.
 
+## Beta source and capabilities
+
+This source adapter accompanies plugin **2.7.0-beta.1** and is **not included in the npm package**. Fetch [the matching GitHub source tag](https://github.com/linanw/tuya-homebridge/tree/v2.7.0-beta.1/integrations/matterdesk) before using the repository-relative import below. The native Qt applications use their own Qt Network client: [MatterDesk 0.7.0-beta.1 / MatterCamViewer 2.5.0-beta.1 setup](https://github.com/linanw/MatterDesk/blob/matterdesk-v0.7.0-beta.1/docs/TUYA_METADATA_SYNC.md). Pre-release packages are being prepared; the linked release pages determine actual availability.
+
+With server-side `allowWrites: true`, PaaS supports device-name and room-name writes, while Custom supports device-name writes only. `moveDevice` remains false for both. The public contracts are documented in [Tuya API contracts](https://github.com/linanw/tuya-homebridge/blob/v2.7.0-beta.1/docs/metadata-sync/TUYA_API_CONTRACTS.md); real account permissions are still unverified. Read the current capabilities rather than inferring support from the project type. Start with one explicit binding and a read-only service before enabling writes.
+
+此适配器需从对应源码标签另外获取，npm 包不包含它。PaaS 可在服务端明确开启后写设备名和房间名，Custom 仅设备名；设备移动仍禁用。先从一个设备只读绑定开始，再核对能力及实际账号权限。
+
 ## Exports
 
 ```js
@@ -200,9 +208,12 @@ if (receipt.status === 'confirmed') {
 }
 ```
 
-Room writes use explicit source room IDs and a same-home `device.move` or supported
-`room.rename` only. Map controller room IDs through the profile's explicit room
-bindings before planning; never send private controller home/room IDs to Tuya.
+Room-name writes use explicit source room IDs and `room.rename` only when declared
+by the current provider. Current PaaS supports this with `allowWrites: true`;
+Custom does not. Both current providers keep `device.move` disabled: do not
+substitute POST-add or full membership replacement. Map controller room IDs
+through the profile's explicit room bindings before planning; never send private
+controller home/room IDs to Tuya.
 
 On restart, pending entries become uncertain, profiles require a fresh read, and
 no stored command is replayed. A new source epoch invalidates old queued work but

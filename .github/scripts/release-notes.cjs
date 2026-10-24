@@ -3,8 +3,8 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '../..');
 const tag = process.argv[2];
-const match = /^v?(\d+\.\d+\.\d+)$/.exec(tag || '');
-if (!match) throw new Error('Provide a stable version tag such as v2.6.1');
+const match = /^v?((?:0|[1-9]\d*)\.(?:0|[1-9]\d*)\.(?:0|[1-9]\d*)(?:-(?:alpha|beta|rc)\.[1-9]\d*)?)$/.exec(tag || '');
+if (!match) throw new Error('Provide a version tag such as v2.6.2 or v2.7.0-beta.1');
 const version = match[1];
 const manifest = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 if (manifest.version !== version) throw new Error(`Tag ${tag} does not match package version ${manifest.version}`);

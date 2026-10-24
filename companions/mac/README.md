@@ -4,6 +4,12 @@ This is an iPad / **Mac Catalyst** HomeKit app, not a native macOS HomeKit execu
 
 这是 iPad / **Mac Catalyst** HomeKit 应用，不是直接在原生 macOS 程序中导入 HomeKit。它连接本仓库可选的 Metadata Sync v1 服务。纯 Foundation 的 `Core` 可在 Linux 测试。访问 Apple 家庭必须正确签名、具备 HomeKit entitlement，并取得用户授权。
 
+## Beta source and installation / beta 源码
+
+Use the companion source from [plugin tag v2.7.0-beta.1](https://github.com/linanw/tuya-homebridge/tree/v2.7.0-beta.1/companions/mac), with the [2.7.0-beta.1 server setup](https://github.com/linanw/tuya-homebridge/blob/v2.7.0-beta.1/docs/metadata-sync/SETUP.md). The npm package does not contain `companions/`; installing the plugin does not install this app. This beta supplies source and build instructions, not a signed Mac installer. Signing and HomeKit access must be configured on the intended Mac.
+
+从对应 GitHub 标签获取伴侣源码；npm 安装插件不会安装此 App，也不包含 `companions/`。本轮提供源码和构建步骤，不提供已签名 Mac 安装包。插件走独立 `beta` 通道，正式版 `latest` 仍为 2.6.2。
+
 ## Build and run / 构建运行
 
 1. On a Mac with Xcode 16 or later, install XcodeGen (`brew install xcodegen`). Run `xcodegen generate --spec companions/mac/project.yml` from the repository root.
@@ -20,9 +26,9 @@ The app must remain running and the Mac awake. Minimizing its window is fine. Qu
 
 ## What can synchronize / 当前能力
 
-The server declares capabilities for the current Tuya authentication model. PaaS can read Tuya App homes, rooms and names; its cloud writes are disabled until a verified write contract is implemented. Custom projects expose device names, not Smart Home App rooms; `renameDevice` works only when explicitly enabled by the server administrator. A Custom profile can explicitly bind an Apple home to the server for **device names only**, even when the source home list is empty. Full bidirectional room synchronization is therefore unavailable with these current providers. Unsupported directions are shown as conflicts and never reported as successful.
+The server declares capabilities for the current Tuya authentication model. PaaS can read Tuya App homes, rooms and names; with `metadataSync.allowWrites: true`, it also implements device-name and room-name updates using verified official request contracts. Real account/service permissions still require validation. Custom projects expose device names only, with optional device-name writes; assets are not Smart Home App rooms. A Custom profile can explicitly bind an Apple home for **device names only**, even with an empty source home list. Existing explicit Mac room mappings and capability checks govern supported room-name synchronization; this beta adds no new Mac room editor. Moving a device back to a Tuya room remains disabled for both providers, so full bidirectional room-membership synchronization is unavailable. Unsupported directions are never reported as successful.
 
-服务端能力决定可同步方向：PaaS 可以读取涂鸦 App 家庭、房间、名称，当前不提供已验证的云写入；Custom 只提供设备名，且仅管理员明确开启时可改云端设备名，不提供 App 房间。Custom 可以显式选择 Apple 家庭并绑定到服务器，进行**仅设备名称**同步。当前 provider 不支持完整双向房间同步，应用不会伪造成功。
+服务端能力决定方向：PaaS 可读取 App 家庭、房间和名称，管理员开启 `allowWrites` 后可写设备名及房间名；官方接口已核实，真实账号权限仍需验证。Custom 仅设备名及可选名称写回，不提供 App 房间，可以显式绑定 Apple 家庭进行**仅设备名称**同步。Mac 沿用已有房间映射与能力判断，本轮不新增 Mac 房间编辑器。两个 provider 均不支持移房写回，因此完整的房间归属双向同步仍不可用。
 
 Mappings and last-agreed baselines stay in this app's local Application Support directory. Tokens are kept separately in a non-synchronizing `ThisDeviceOnly` Keychain item scoped to the normalized server URL. Removing a token does not change the server's configured token; rotate it at the server when necessary. No token belongs in a sample JSON file, screenshot, log, or Git commit.
 

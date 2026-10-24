@@ -117,7 +117,7 @@
           "metadataSync": {
             "title": "Mac / MatterDesk metadata sync (preview)",
             "type": "object",
-            "description": "Optional authenticated service for companion apps. Pairing through Matter alone cannot synchronize Apple or Google private rooms. Current PaaS metadata is read-only; room writes are unavailable.",
+            "description": "Optional authenticated service for companion apps. PaaS supports opt-in device and room renaming; Custom supports opt-in device renaming. Device moves remain unavailable. Account/API permissions are required.",
             "properties": {
               "enabled": {
                 "title": "Enable metadata service",
@@ -165,7 +165,7 @@
                 "title": "Allow supported Tuya metadata writes",
                 "type": "boolean",
                 "default": false,
-                "description": "Opt in to verified provider operations only. Currently Custom project device rename is supported; PaaS rename and all room writes remain disabled."
+                "description": "Opt in to documented operations: PaaS device/room renaming and Custom device renaming. Cloud permissions and authoritative reads are required. Device moves remain disabled."
               }
             }
           },

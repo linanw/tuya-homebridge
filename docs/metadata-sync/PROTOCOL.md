@@ -1,14 +1,14 @@
 # Metadata Sync v1 (implementation contract)
 
-This contract is implemented by plugin **2.7.0-beta.3**, published through npm's separate `beta` channel; stable `latest` remains **2.6.2**. Release availability is determined by the registry and matching GitHub pre-release. Native Matter continues to control devices; the authenticated metadata service is a separate integration for the Mac HomeKit companion and compatible Matter controllers. It does not obtain Apple/Google private home information through Matter. See [installation and single-device testing](SETUP.md).
+This contract is implemented by stable plugin **2.7.0** on npm's `latest` channel, using the beta.3 runtime without new runtime changes. The service is disabled by default and cloud writes require separate `allowWrites`. Native Matter continues to control devices; the authenticated metadata service is a separate integration for the Mac HomeKit test companion and compatible Matter controllers. It does not obtain Apple/Google private home information through Matter. See [installation and single-device testing](SETUP.md).
 
-Beta.3 fixes native window-covering confirmation by leaving derived motion to Homebridge while retaining exact position/configuration checks. It also corrects lighting error context and reports when Tuya API returns `2001` (device offline); it does not change command payloads or resolve that API rejection. These changes leave metadata schema version 1, device identities and pairings intact.
+Version 2.7.0 fixes native window-covering confirmation and legacy cached movement by leaving derived motion to Homebridge while retaining exact position/configuration checks. It also corrects lighting error context and reports when Tuya API returns `2001` (device offline), without changing command payloads. Metadata schema version 1, device identities and pairings stay intact; Mac and desktop clients remain test versions.
 
-beta.3 由 Homebridge 管理窗帘派生运动状态，保留位置与配置的精确确认，修复原生状态确认超时；同时纠正照明错误特征并提示涂鸦 API 返回 `2001`，不修改指令内容，也不代表解决该 API 拒绝。元数据 schema version 1、设备身份与配对保持原样。
+正式版 2.7.0 沿用 beta.3 运行代码，元数据服务默认关闭，写入另需开启 `allowWrites`。由 Homebridge 管理窗帘派生运动状态，保留位置与配置的精确确认，修复确认超时和旧缓存状态；同时纠正照明错误特征并提示涂鸦 API 返回 `2001`，不修改指令内容。元数据 schema version 1、设备身份与配对保持原样，Mac 与桌面客户端仍为测试版。
 
-Beta.2 corrects the underlying Tuya query signing: query-key sorting, RFC 3986 transport encoding and one canonical-URL decode, including comma-separated batch `device_ids`. The `1004 sign invalid` defect also exists in 2.6.2 and is independent of this metadata protocol. Metadata Sync stays at schema version 1; MatterDesk 0.7.0-beta.1 and MatterCamViewer 2.5.0-beta.1 remain compatible. See [upgrade and safe operation diagnostics](SETUP.md).
+Version 2.7.0 includes the Tuya query-signing fix: query-key sorting, RFC 3986 transport encoding and one canonical-URL decode, including comma-separated batch `device_ids`. The `1004 sign invalid` defect exists in 2.6.2 and is independent of this metadata protocol. MatterDesk 0.7.0-beta.1 and MatterCamViewer 2.5.0-beta.1 remain compatible. See [upgrade and safe operation diagnostics](SETUP.md).
 
-beta.2 修复底层涂鸦 query 签名的键排序、RFC 3986 传输编码及 canonical URL 一次解码，包含逗号分隔批量 `device_ids` 的 `1004 sign invalid` 问题。此缺陷在 2.6.2 中也已存在，与元数据协议无关。协议仍为 schema version 1，桌面端维持 MatterDesk 0.7.0-beta.1 与 MatterCamViewer 2.5.0-beta.1。遇到 `1004` 先按[升级与安全 operation 诊断](SETUP.md)处理，保留原凭据与存储。
+2.7.0 包含底层涂鸦 query 签名的键排序、RFC 3986 传输编码及 canonical URL 一次解码修复，包含逗号分隔批量 `device_ids` 的 `1004 sign invalid` 问题。此缺陷在 2.6.2 中已存在，与元数据协议无关。桌面端维持 MatterDesk 0.7.0-beta.1 与 MatterCamViewer 2.5.0-beta.1。遇到 `1004` 先按[升级与安全 operation 诊断](SETUP.md)处理，保留原凭据与存储。
 
 ## Transport
 
@@ -31,7 +31,7 @@ beta.2 修复底层涂鸦 query 签名的键排序、RFC 3986 传输编码及 ca
 
 All reads and writes use the same server identity. Provider polling is performed by one coordinator, with coalesced refresh and a configurable interval of at least 60 seconds. Client polling consumes the cache only. Source failures must not be interpreted as empty homes, deleted rooms or an unassigned device.
 
-## Current beta provider capabilities
+## Current provider capabilities
 
 The metadata service and cloud writes are disabled by default. With `metadataSync.allowWrites: true`, authoritative reads and explicit bindings, Smart Home PaaS supports `device.rename` and `room.rename`; Custom supports `device.rename` only and exposes no App room graph. PaaS sends name-only `PUT /v1.0/devices/{device_id}` or `PUT /v1.0/homes/{home_id}/rooms/{room_id}` requests. Actual project/account permissions remain subject to Tuya authorization and must be checked on the intended account; documentation verification alone is not a successful live write.
 

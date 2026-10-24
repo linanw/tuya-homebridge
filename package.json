@@ -1,6 +1,6 @@
 {
   "name": "@linanw/homebridge-tuya-platform",
-  "version": "2.7.0-beta.3",
+  "version": "2.7.0",
   "description": "Tuya Open API integration for Homebridge with optional Matter support.",
   "main": "index.js",
   "scripts": {

@@ -1,8 +1,8 @@
-# Metadata sync beta / 元数据同步 beta
+# Metadata sync setup / 元数据同步配置
 
-This guide targets plugin **2.7.0-beta.3**, MatterDesk **0.7.0-beta.1** and MatterCamViewer **2.5.0-beta.1**. The plugin beta uses npm's `beta` dist-tag; `latest` remains **2.6.2**. Both desktop Linux AppImages and their SHA-256 files are published on the linked beta.1 pre-release pages. Their versions remain unchanged by these plugin fixes. A stable 2.6.2 installation does not include this metadata service.
+This guide targets stable plugin **2.7.0** on npm's `latest` channel. It includes the beta.3 runtime without additional runtime changes; the `beta` tag retains the earlier test version. The Mac companion, MatterDesk **0.7.0-beta.1** and MatterCamViewer **2.5.0-beta.1** remain test clients. Both desktop Linux AppImages and their SHA-256 files are published on the linked pre-release pages. The service starts disabled and writes require separate `allowWrites`; older plugin 2.6.2 does not include it.
 
-本指南对应插件 **2.7.0-beta.3**、MatterDesk **0.7.0-beta.1** 与 MatterCamViewer **2.5.0-beta.1**。插件 beta 使用独立测试通道，正式版 `latest` 仍为 **2.6.2**。两个桌面 Linux AppImage 及 SHA-256 校验文件已发布在下方 beta.1 预发布页，本轮插件修复不改变桌面版本。
+本指南对应 npm `latest` 通道的插件正式版 **2.7.0**，沿用 beta.3 运行代码，不增加运行逻辑；`beta` 标签保留原测试版本。Mac 伴侣、MatterDesk **0.7.0-beta.1** 与 MatterCamViewer **2.5.0-beta.1** 仍为测试客户端。两个桌面 Linux AppImage 及 SHA-256 校验文件已发布在下方预发布页。服务默认关闭，写入另需开启 `allowWrites`；旧版插件 2.6.2 不含此服务。
 
 Native Matter still provides device control. This authenticated service supplies names and rooms to separately authorized clients; Matter pairing alone does not grant Apple Home or Google Home private room/alias access.
 
@@ -10,41 +10,41 @@ Native Matter still provides device control. This authenticated service supplies
 
 ## 1. Install the plugin / 安装插件
 
-In Homebridge UI, open the plugin card's **⋮ → Manage Versions / 管理版本 → beta / 2.7.0-beta.3**. Alternatively, run this in the same Node/npm environment or container as the Homebridge service:
+Update normally in Homebridge UI, or select **2.7.0** under **⋮ → Manage Versions / 管理版本**. Beta users can switch to the stable release through the same entry. Alternatively, run this in the same Node/npm environment or container as the Homebridge service:
 
 ```sh
-npm install -g @linanw/homebridge-tuya-platform@beta
-# Exact version for repeatable testing / 固定本轮版本：
-npm install -g @linanw/homebridge-tuya-platform@2.7.0-beta.3
+npm install -g @linanw/homebridge-tuya-platform@latest
+# Exact stable version / 固定正式版本：
+npm install -g @linanw/homebridge-tuya-platform@2.7.0
 ```
 
-Keep your existing Tuya account settings, Homebridge storage, child bridge identity and Matter pairings. Restart the existing service after updating. Return to the stable channel with `npm install -g @linanw/homebridge-tuya-platform@latest`; do not delete storage or re-pair merely to change package versions.
+Keep your existing Tuya account settings, Homebridge storage, child bridge identity and Matter pairings. Restart the existing service after updating. Do not delete storage or re-pair merely to change package versions.
 
-保留现有账号配置、Homebridge 存储、子桥身份及 Matter 配对，更新后重启现有服务。需要退回正式版时安装 `@latest`，不要清空缓存或重新配对。恢复 2.6.2 后元数据服务不可用，已有普通 HAP / Matter 控制继续按稳定版能力运行。
+保留现有账号配置、Homebridge 存储、子桥身份及 Matter 配对，更新后重启现有服务；不要清空缓存或重新配对。若主动降级至 2.6.2，元数据服务不可用，普通 HAP / Matter 控制按该旧版能力运行。
 
 ### Matter window-covering confirmation / Matter 窗帘状态确认
 
-Beta.3 fixes confirmation timeouts reproduced with Homebridge 2.4. The window-covering driver has no physical getter/update for HAP `PositionState`; its default `0` must not be treated as real motion. The adapter omits `operationalStatus` and lets Homebridge derive it from positions. Target/current positions, configuration and end-product type remain subject to exact confirmation; the timeout is not extended. Existing Tuya datapoints and pairing storage stay intact.
+Version 2.7.0 includes the beta.3 fix for confirmation timeouts reproduced with Homebridge 2.4. The window-covering driver has no physical getter/update for HAP `PositionState`; its default `0` must not be treated as real motion. The adapter leaves derived motion to Homebridge and corrects stale cached movement once on registration/restoration when confirmed target/current positions coincide. Target/current positions, configuration and end-product type remain subject to exact confirmation; the timeout is not extended. No motor-stop command, Tuya datapoint or pairing reset is involved.
 
-beta.3 修复已在 Homebridge 2.4 复现的确认超时。窗帘驱动没有 HAP `PositionState` 的物理读取或更新，默认值 `0` 不能当作真实运动状态。适配层不再提交 `operationalStatus`，改由 Homebridge 根据位置派生。目标与当前位置、配置和产品类型仍精确确认，不延长超时；保留原涂鸦数据点与配对存储。
+2.7.0 包含 beta.3 已修复的 Homebridge 2.4 状态确认超时。窗帘驱动没有 HAP `PositionState` 的物理读取或更新，默认值 `0` 不能当作真实运动状态。适配层由 Homebridge 派生运动状态，在注册/恢复时对已确认目标与当前位置相等的旧缓存运动状态一次性纠正。位置、配置与产品类型仍精确确认，不延长超时；不发送电机停止指令，不重置数据点或配对。
 
 ### `2001`: Tuya API reports device offline / 涂鸦 API 报告设备离线
 
 Tuya [defines `2001` as `device is offline`](https://developer.tuya.com/en/docs/iot/error-code?id=K989ruxx88swc). This is the API's response, not proof that the physical device is unreachable. App control can still work over mobile data. Check the **same device** in the linked cloud project: its `online` status, associated account and data center. Keep credentials private; share only versions, sanitized error codes and static `operation: device command` lines when troubleshooting.
 
-Beta.3 reports the actual failed HAP characteristic (`On`, `Brightness`, etc.) rather than always saying `Brightness`. It adds the static operation label and a safe API-offline hint; it does not change lighting command payloads or resolve the cloud API rejection. Live API/device verification remains pending.
+Version 2.7.0 reports the actual failed HAP characteristic (`On`, `Brightness`, etc.) rather than always saying `Brightness`. It adds the static operation label and a safe API-offline hint without changing lighting command payloads. Successful physical smoke validation was reported for beta.3; device connectivity and API permissions still depend on the account and device.
 
 涂鸦[将 `2001` 定义为 `device is offline`](https://developer.tuya.com/en/docs/iot/error-code?id=K989ruxx88swc)。这是 API 返回的状态，不代表物理设备必然不可达；App 通过移动数据仍可能正常控制。请核对关联云项目中的**同一设备**：`online` 状态、关联账号及数据中心。不要提供凭据，排查时仅分享版本、脱敏错误码及静态 `operation: device command` 日志。
 
-beta.3 让 HAP 错误日志显示实际失败的特征（如 `On`、`Brightness`），不再固定写成 `Brightness`，并增加静态操作标签和安全的 API 离线提示。本次不修改照明指令内容，也不代表解决云 API 拒绝；实际 API 与设备验证仍待完成。
+2.7.0 让 HAP 错误日志显示实际失败的特征（如 `On`、`Brightness`），不再固定写成 `Brightness`，并增加静态操作标签和安全的 API 离线提示，不修改照明指令内容。beta.3 的实机冒烟验证已获正常反馈；设备连接与 API 权限仍取决于具体账号和设备。
 
 ### `1004 sign invalid`
 
-First upgrade the plugin to **2.7.0-beta.3** and restart the existing service, keeping your access credentials, storage and pairings. This beta sorts query keys, uses RFC 3986 transport encoding and decodes the canonical signing URL once, following the [official SDK](https://github.com/tuya/tuya-connector-nodejs/blob/master/src/core/client.ts). It fixes comma-separated batch `device_ids` signing; the defect also exists in stable 2.6.2 and is unrelated to enabling metadata sync. Offline regression tests cover sorting, encoding and batch IDs; live Tuya validation remains pending.
+First upgrade the plugin to **2.7.0** and restart the existing service, keeping your access credentials, storage and pairings. It sorts query keys, uses RFC 3986 transport encoding and decodes the canonical signing URL once, following the [official SDK](https://github.com/tuya/tuya-connector-nodejs/blob/master/src/core/client.ts). It fixes comma-separated batch `device_ids` signing present in 2.6.2, independently of metadata sync. Offline regression tests cover sorting, encoding and batch IDs.
 
 If `1004` persists, provide the plugin, Homebridge and Node.js versions and sanitized error lines. The new static `operation` labels distinguish `account login`, `associated device list`, `batch device functions` and other steps without URLs or device IDs. Review logs and remove account/device identifiers, credentials, tokens, signed headers and authentication payloads before sharing. Do not reset keys, delete caches or re-pair devices as an initial workaround for this signing defect.
 
-先将插件升级至 **2.7.0-beta.3** 并重启现有服务，保留 access 凭据、存储与配对。本 beta 按[官方 SDK](https://github.com/tuya/tuya-connector-nodejs/blob/master/src/core/client.ts)规则对 query 键排序，以 RFC 3986 编码传输，对 canonical URL 解码一次，修复逗号分隔批量 `device_ids` 的签名不一致。该缺陷在稳定版 2.6.2 中也已存在，与开启元数据同步无关。离线回归覆盖排序、编码及批量 ID；真实涂鸦联调仍待验证。
+先将插件升级至 **2.7.0** 并重启现有服务，保留 access 凭据、存储与配对。按[官方 SDK](https://github.com/tuya/tuya-connector-nodejs/blob/master/src/core/client.ts)规则对 query 键排序，以 RFC 3986 编码传输，对 canonical URL 解码一次，修复 2.6.2 中已存在的逗号分隔批量 `device_ids` 签名问题，与开启元数据同步无关。离线回归覆盖排序、编码及批量 ID。
 
 若 `1004` 持续，提供插件、Homebridge、Node.js 版本及脱敏错误行。新增的静态 `operation` 标签可区分 `account login`（登录）、`associated device list`（设备列表）、`batch device functions`（批量功能）等步骤，不包含 URL 或设备 ID。分享前检查并删除账号/设备标识、凭据、token、签名请求头及鉴权内容。不要先通过重置密钥、清空缓存或重新配对来绕过这个签名缺陷。
 
@@ -104,8 +104,8 @@ For a client on another computer, use normally trusted HTTPS. Direct TLS needs m
 
 - **MatterDesk:** use the `matterdesk-v0.7.0-beta.1` [pre-release](https://github.com/linanw/MatterDesk/releases/tag/matterdesk-v0.7.0-beta.1), then open **Settings → 涂鸦同步**.
 - **MatterCamViewer:** use the `mattercamviewer-v2.5.0-beta.1` [pre-release](https://github.com/linanw/MatterDesk/releases/tag/mattercamviewer-v2.5.0-beta.1), then use its independent **涂** entry. It remains a viewer for actual camera endpoints; this feature adds no Tuya camera driver.
-- **Mac HomeKit companion:** fetch and build the [companion at v2.7.0-beta.3](https://github.com/linanw/tuya-homebridge/blob/v2.7.0-beta.3/companions/mac/README.md). It needs valid signing, HomeKit entitlement and explicit user home access. No signed Mac installer is supplied here.
-- **Optional Node adapter:** fetch the [source at v2.7.0-beta.3](https://github.com/linanw/tuya-homebridge/blob/v2.7.0-beta.3/integrations/matterdesk/README.md). It is an integration library, not an OHF plugin or a desktop application.
+- **Mac HomeKit companion (test version):** fetch and build the [companion at v2.7.0](https://github.com/linanw/tuya-homebridge/blob/v2.7.0/companions/mac/README.md). It needs valid signing, HomeKit entitlement and explicit user home access. No signed Mac installer is supplied here.
+- **Optional Node adapter:** fetch the [source at v2.7.0](https://github.com/linanw/tuya-homebridge/blob/v2.7.0/integrations/matterdesk/README.md). It is an integration library, not an OHF plugin or a desktop application.
 
 The npm package includes this guide, the service and the [protocol](PROTOCOL.md), but **does not include `companions/` or `integrations/`**. Their GitHub links are intentional. Download each desktop AppImage with its matching `.AppImage.sha256` from the linked pre-release and verify it with `sha256sum -c <checksum-file>` before running it. Source tags remain available for local builds.
 
@@ -130,7 +130,7 @@ Set `metadataSync.allowWrites` to **true** and restart the Tuya bridge only when
 
 需要写回时，将 `metadataSync.allowWrites` 改为 **true** 并重启涂鸦桥。客户端仍需核对能力、权威观测、绑定、基线和草稿版本，明确确认后才写入。PaaS 已实现设备名称和房间名称的独立更新；Custom 仅设备名，不把 assets 当作 App 房间。接口文档核实不等于当前账号已获授权：权限不足、数据中心或关联账号不匹配时，操作会失败，不能算作同步成功。
 
-In the Qt panel, device-name and room-name drafts have separate confirmation actions. Room-name editing targets the selected device's explicitly bound source room; it does not rename a local HomeStore room. Start with one noncritical name edit, then confirm the authoritative value and the Tuya app before testing more bindings. The Mac companion uses its existing explicit room mappings and capability checks; this beta does not add a new Mac room editor.
+In the Qt panel, device-name and room-name drafts have separate confirmation actions. Room-name editing targets the selected device's explicitly bound source room; it does not rename a local HomeStore room. Start with one noncritical name edit, then confirm the authoritative value and the Tuya app before testing more bindings. The Mac test companion uses its existing explicit room mappings and capability checks; this release does not add a new Mac room editor.
 
 Qt 面板中的设备名与房间名分别编辑、分别确认。房间名只修改所选设备关联的来源房间，不修改本地 HomeStore 房间。先测试一个非关键名称，并在权威读取及涂鸦 App 中核对结果。Mac 伴侣沿用已有房间映射和能力检查，本轮未新增 Mac 房间编辑器。
 

@@ -4,6 +4,26 @@ Release notes are available in English and Simplified Chinese. Homebridge UI's *
 
 以下提供英文和简体中文更新说明。Homebridge 插件管理的 **What's New / 更新说明** 读取对应版本的 [GitHub Release](https://github.com/linanw/tuya-homebridge/releases)；后续 npm 包也会包含本更新日志。
 
+## [2.7.0] - 2026-10-24
+
+### English
+
+- Promote the beta.3 runtime to the stable npm `latest` channel without new runtime changes. Homebridge What's New uses the matching `v2.7.0` GitHub Release; beta tags remain available as history.
+- Fix query signing present in 2.6.2 that could cause `1004 sign invalid`, including comma-separated batch device IDs: sort query keys, use RFC 3986 transport encoding and decode the canonical URL once.
+- Fix Matter window-covering confirmation timeouts and stale cached movement at the target. Let Homebridge derive motion while preserving exact position/configuration checks, Tuya datapoints, endpoints and pairings.
+- Show the actual failed HAP characteristic and add static operation labels plus a safe `2001` hint: **Tuya API reports device offline**. Lighting command payloads are unchanged.
+- Add an optional authenticated metadata service for names and App homes/rooms. It starts disabled; cloud writes require separate `allowWrites`. PaaS supports device and room rename, Custom supports device rename only, and device moves remain disabled. Ordinary Matter pairing does not expose Apple/Google private home data.
+- Keep the Mac companion and MatterDesk 0.7.0-beta.1 / MatterCamViewer 2.5.0-beta.1 clients as test versions. 171 automated tests pass, with successful physical smoke validation reported for beta.3; permissions and behavior have not been verified for every Tuya account. Homebridge verification remains pending.
+
+### 简体中文
+
+- 将 beta.3 运行代码提升为 npm `latest` 正式版，不新增运行逻辑。Homebridge 更新说明读取对应 `v2.7.0` GitHub Release，原 beta 标签保留历史。
+- 修复 2.6.2 中已存在、可能触发 `1004 sign invalid` 的 query 签名，包括逗号分隔批量设备 ID：按键排序、RFC 3986 编码传输、canonical URL 解码一次。
+- 修复 Matter 窗帘状态确认超时及到位后的旧缓存运动状态。由 Homebridge 派生运动状态，继续精确确认位置与配置，保留涂鸦数据点、端点和配对。
+- HAP 错误显示实际失败的特征，增加静态操作标签及 `2001` 的**涂鸦 API 报告设备离线**提示，照明指令内容保持不变。
+- 新增默认关闭、需要令牌的元数据服务，读取名称及 App 家庭/房间。云写入另需开启 `allowWrites`：PaaS 支持设备与房间改名，Custom 仅设备改名；设备移房保持禁用。普通 Matter 配对不会授予 Apple/Google 私有家庭数据访问权。
+- Mac 伴侣及 MatterDesk 0.7.0-beta.1 / MatterCamViewer 2.5.0-beta.1 客户端仍为测试版。171 项自动化测试通过，beta.3 的实机冒烟验证已获正常反馈；未验证所有涂鸦账号的权限与行为，Homebridge 认证仍待评审。
+
 ## [2.7.0-beta.3] - 2026-10-24
 
 ### English

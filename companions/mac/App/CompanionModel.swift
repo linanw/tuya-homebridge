@@ -272,10 +272,24 @@ final class CompanionModel: ObservableObject {
         let apple = try homeKit.snapshot(homeID: binding.homeKitHomeID)
         snapshot = remote; local = apple
         let plan = SyncPlanner.plan(snapshot: remote, local: apple, bindings: binding, baselines: saved.baselines)
+        guard plan.blockedReasons.isEmpty else {
+            running = false; reviews = []
+            status = "Synchronization is blocked: " + plan.blockedReasons.joined(separator: ", ") + ". No changes were sent."
+            return
+        }
         for (id, baseline) in plan.agreements {
             saved.baselines[id] = baseline; saved.blockedFields.remove(id); saved.unknownFields.remove(id)
         }
         reviews = plan.conflicts.map(reviewItem)
+        for (sourceID, localID) in binding.deviceBindings {
+            if !remote.devices.contains(where: { $0.id == sourceID }) || !apple.devices.contains(where: { $0.id == localID }) {
+                reviews.append(ReviewItem(id: "missing:" + sourceID, title: "Bound device unavailable / 已绑定设备不可用",
+                    sourceValue: remote.devices.first(where: { $0.id == sourceID })?.name ?? sourceID,
+                    appleValue: apple.devices.first(where: { $0.id == localID })?.name ?? localID,
+                    reason: "A bound device is missing from a current graph. Its baseline is preserved; no deletion or replacement is inferred.",
+                    canKeepSource: false, canKeepApple: false))
+            }
+        }
         for change in plan.changes where saved.blockedFields.contains(change.id) {
             var item = reviewItem(change)
             item.reason = "A prior operation failed or was uncertain. Automatic retry is blocked; review fresh values explicitly."

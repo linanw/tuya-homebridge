@@ -5,19 +5,27 @@
 [![npm](https://img.shields.io/npm/v/@linanw/homebridge-tuya-platform.svg)](https://www.npmjs.com/package/@linanw/homebridge-tuya-platform)
 [![npm](https://img.shields.io/npm/dt/@linanw/homebridge-tuya-platform.svg)](https://www.npmjs.com/package/@linanw/homebridge-tuya-platform)
 
-由 linanw 维护的 Homebridge 涂鸦插件，通过 Tuya Open API 将设备接入 HomeKit，并可使用 Homebridge 的原生 Matter 桥接接入 Apple Home、Google Home 等平台。该项目基于涂鸦原始 Homebridge 插件开发。
+由 linanw 维护的 Homebridge 涂鸦插件，通过 Tuya Open API 将设备接入 HAP（HomeKit），并可使用 Homebridge 的原生 Matter 桥接接入 Apple Home、Google Home 等平台。HAP 与 Matter 可同时使用。该项目基于涂鸦原始 Homebridge 插件开发。
 
 ## What's New / 更新日志
 
 完整版本说明和升级记录请查看 [CHANGELOG.md](CHANGELOG.md) 与 [GitHub Releases](https://github.com/linanw/tuya-homebridge/releases)。
 
+**2.6.2** 为 Homebridge 认证评审做准备，完善账号配置校验和设置界面，并明确声明同时支持 HAP 与 Matter。
+
 **2.6.1** 修复了无线开关上报电池等非按键数据时导致的启动崩溃。迁移缓存时保留原按键服务标识，启动时不回放上一次按键事件。具体步骤见下方的旧插件迁移说明。
+
+### Homebridge 认证状态
+
+状态：**认证准备，待评审**。本次更新按 [Homebridge 认证要求](https://github.com/homebridge/plugins/wiki/Verified-Plugins) 整理插件。是否通过由 Homebridge 团队审核决定，目前尚未获得认证。
+
+详见[技术准备评估及同类已认证插件对比](https://github.com/linanw/tuya-homebridge/blob/linanw-package/docs/VERIFICATION.md)。功能不重复这一项需要个案评审，准备的申请会明确说明已有同类功能的重叠。
 
 ## 运行要求
 
 | 功能 | 最低要求 |
 | --- | --- |
-| Node.js | 22 或更高版本，建议使用 Homebridge 支持的 LTS 版本 |
+| Node.js | Node 22 LTS（22.13.1 起），或 Node 24 LTS |
 | HomeKit | Homebridge 1.11.4 或更高版本 |
 | Matter | Homebridge 2.4 或更高版本 |
 
@@ -71,7 +79,24 @@ homebridge -U /path/to/local/homebridge-storage
 }
 ```
 
-Tuya Smart 使用 `appSchema: "tuyaSmart"`，Smart Life 使用 `appSchema: "smartlife"`。不要将真实账号、密码或 Access Secret 提交到 Git。使用真实凭据时保持 `options.debug` 关闭；详细的涂鸦请求日志可能包含账号和认证信息。
+Tuya Smart 使用 `appSchema: "tuyaSmart"`，Smart Life 使用 `appSchema: "smartlife"`。不要将真实账号、密码或 Access Secret 提交到 Git。`options.debug` 默认关闭，排查问题时可临时开启。诊断日志不输出认证请求内容，并会脱敏已知凭据；设备名称、ID 和状态仍可能出现在日志中，分享前请先检查。
+
+仅安装插件不会连接涂鸦云。必填配置缺失或无效时，平台保持未启动状态；补全配置并重启 Homebridge 后，才会进行登录、设备发现和 MQTT 连接。
+
+### 项目类型与可选设备设置
+
+Homebridge UI 可编辑 `options` 下的以下设置：
+
+| 选项 | 用途 |
+| --- | --- |
+| `projectType` | `"2"` 表示 Smart Home PaaS，`"1"` 表示自定义项目。两者都需要账号和云项目凭据。 |
+| `appSchema`、`countryCode` | PaaS 必填，按实际应用和账号所在国家填写；国家代码不设默认值。 |
+| `endPoint` | 自定义项目必填，使用云项目的 HTTPS API 端点；PaaS 留空。 |
+| `disabledDevice` | 通过 `{ "id": "TUYA_DEVICE_ID" }` 条目数组，从 HomeKit 与 Matter 中排除设备。 |
+| `accessoryType` | 通过 `{ "id": "TUYA_DEVICE_ID", "type": "Switch" }` 条目数组修正错误的设备分类；所选驱动必须符合设备实际 datapoint 能力。 |
+| `listDeviceId` | 临时列出设备名称和 ID，便于配置排除项或驱动覆盖；用完后关闭。 |
+| `lang` | Tuya API 请求的双字母语言代码，例如 `en` 或 `zh`。 |
+| `debug` | 诊断日志，默认关闭。 |
 
 ## 从旧包迁移
 

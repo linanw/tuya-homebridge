@@ -5,13 +5,21 @@ English | [简体中文](README.zh-CN.md)
 [![npm](https://img.shields.io/npm/v/@linanw/homebridge-tuya-platform.svg)](https://www.npmjs.com/package/@linanw/homebridge-tuya-platform)
 [![npm](https://img.shields.io/npm/dt/@linanw/homebridge-tuya-platform.svg)](https://www.npmjs.com/package/@linanw/homebridge-tuya-platform)
 
-A Homebridge plugin maintained by linanw for controlling Tuya devices through HomeKit and optional Matter. It uses [Tuya Open API](https://developer.tuya.com/en/docs/cloud/) and builds on the upstream Tuya Homebridge plugin.
+A Homebridge plugin maintained by linanw for controlling Tuya devices through HAP (HomeKit) and optional Matter. Both transports can operate together. It uses [Tuya Open API](https://developer.tuya.com/en/docs/cloud/) and builds on the upstream Tuya Homebridge plugin.
 
 ## What's New
 
 Read the [changelog](CHANGELOG.md) and [GitHub Releases](https://github.com/linanw/tuya-homebridge/releases) for version details and upgrade notes.
 
+Version **2.6.2** prepares the plugin for Homebridge verification review, with validated account settings, an improved settings form, and explicit support for both HAP and Matter.
+
 Version **2.6.1** fixes wireless-switch startup crashes when Tuya reports battery or other non-button datapoints. Cached button service identities are retained, and startup does not replay a previous button press. See the [migration notes](#wireless-switches-migrated-from-0x5ehomebridge-tuya-platform).
+
+### Homebridge verification
+
+Status: **preparation for review**. This update addresses the [Homebridge verification criteria](https://github.com/homebridge/plugins/wiki/Verified-Plugins). Verification requires review by the Homebridge team; approval has not been granted.
+
+See the [readiness assessment and comparison with existing verified Tuya plugins](https://github.com/linanw/tuya-homebridge/blob/linanw-package/docs/VERIFICATION.md). The non-duplication requirement needs individual review; the prepared application explicitly discloses overlapping functionality.
 
 ## Preparation
 
@@ -25,7 +33,7 @@ Link your Tuya Smart or Smart Life app account and devices to your Tuya cloud pr
 
 ## Installation
 
-Use Node.js 22 or later with Homebridge 1.11.4 or later. Matter requires Homebridge 2.4 or later. Install `@linanw/homebridge-tuya-platform` through the Homebridge UI's Plugins page, or install it globally alongside Homebridge:
+Use a supported Node.js LTS line: Node 22 (22.13.1 or later) or Node 24. HomeKit requires Homebridge 1.11.4 or later; Matter requires Homebridge 2.4 or later. Install `@linanw/homebridge-tuya-platform` through the Homebridge UI's Plugins page, or install it globally alongside Homebridge:
 
 ```sh
 npm install -g @linanw/homebridge-tuya-platform
@@ -61,7 +69,24 @@ Use the plugin settings in Homebridge UI, or add a `TuyaPlatform` entry to the `
 }
 ```
 
-Use `tuyaSmart` for the Tuya Smart app and `smartlife` for Smart Life. Keep credentials in your local configuration and do not commit them to Git. Leave `options.debug` disabled with real credentials: verbose Tuya request logs can contain account data and authentication information.
+Use `tuyaSmart` for the Tuya Smart app and `smartlife` for Smart Life. Keep credentials in your local configuration and do not commit them to Git. `options.debug` is disabled by default; enable it temporarily when diagnosing a problem. Diagnostic logging omits authentication payloads and redacts known credentials, but device names, identifiers, and state may still appear. Review logs before sharing them.
+
+Installing the plugin alone does not start a Tuya connection. Missing or invalid required options leave the platform inactive; complete its settings and restart Homebridge to enable login, device discovery, and MQTT.
+
+### Project types and optional device settings
+
+The Homebridge UI settings expose these options under `options`:
+
+| Option | When to use it |
+| --- | --- |
+| `projectType` | `"2"` for Smart Home PaaS, or `"1"` for a Custom project. Both require the account and cloud project credentials. |
+| `appSchema`, `countryCode` | Required for PaaS; select the actual app and account country. There is no assumed country-code default. |
+| `endPoint` | Required for Custom projects; use the HTTPS API endpoint of your cloud project. Leave it blank for PaaS. |
+| `disabledDevice` | An array of `{ "id": "TUYA_DEVICE_ID" }` entries to exclude devices from both HomeKit and Matter. |
+| `accessoryType` | An array of `{ "id": "TUYA_DEVICE_ID", "type": "Switch" }` entries to override a driver when category detection is incorrect. Select a driver supported by the device's actual datapoints. |
+| `listDeviceId` | Temporarily list discovered device names and IDs to configure exclusions or overrides; turn it off afterward. |
+| `lang` | Two-letter language code for Tuya API requests, for example `en` or `zh`. |
+| `debug` | Diagnostic logging, disabled by default. |
 
 ### Migrate from `@linanw/tuya-homebridge`
 
@@ -93,7 +118,7 @@ Wireless buttons remain available through HomeKit only. Startup restores their s
 
 ## Set up the development environment
 
-Use Node.js 22 or later. HomeKit operation requires Homebridge 1.11.4 or later; Matter requires Homebridge 2.4 or later. The development dependencies include a compatible Homebridge and test runner.
+Use Node 22 (22.13.1 or later) or Node 24 LTS. HomeKit operation requires Homebridge 1.11.4 or later; Matter requires Homebridge 2.4 or later. The development dependencies include a compatible Homebridge and test runner.
 
 ```sh
 npm install
@@ -118,7 +143,7 @@ Matter is optional. With no Matter configuration on the relevant Homebridge brid
 
 ### Enable and pair a bridge
 
-Install Homebridge 2.4 or later on Node.js 22 or later. To enable Matter on the main bridge, merge this fragment into your existing Homebridge `config.json`, preserving the other `bridge` fields and your existing `TuyaPlatform` entry and its `options`:
+Install Homebridge 2.4 or later on a supported Node.js LTS version. To enable Matter on the main bridge, merge this fragment into your existing Homebridge `config.json`, preserving the other `bridge` fields and your existing `TuyaPlatform` entry and its `options`:
 
 ```json
 {

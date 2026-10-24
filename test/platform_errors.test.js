@@ -18,6 +18,9 @@ function fixture(t, options = {}) {
     accessKey: 'fixture-access-key-not-to-log',
     username: 'fixture-account-not-to-log',
     password: 'fixture-password-not-to-log',
+    appSchema: 'smartlife',
+    countryCode: 86,
+    endPoint: 'https://openapi.tuyaus.com',
     ...options,
   } };
   const platform = new Platform({ error: message => errors.push(message) }, config, api);
@@ -109,7 +112,7 @@ test('MQTT device-update and bind errors are caught while later healthy updates 
   assert.equal(on.value, true);
   assert.equal(errors.length, 2);
   assert.match(errors[0], /handle device message Contact sensor \(contact\)/);
-  assert.match(errors[1], /handle device message unnamed \(joining-device\): Cloud lookup unavailable/);
+  assert.match(errors[1], /handle device message unnamed \(joining-device\): Network request failed/);
   assertSafeErrors(errors, config);
 });
 
@@ -124,7 +127,7 @@ test('a project login rejection is handled at the launch boundary without loggin
   api.emit('didFinishLaunching');
   await eventually(() => errors.length === 1);
   assert.equal(started.length, 0);
-  assert.equal(errors[0], 'Failed to initialize TuyaPlatform: Project login unavailable');
+  assert.equal(errors[0], 'Failed to initialize TuyaPlatform: Network request failed');
   assertSafeErrors(errors, config);
 });
 

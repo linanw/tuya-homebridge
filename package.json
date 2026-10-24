@@ -1,10 +1,10 @@
 {
   "name": "@linanw/homebridge-tuya-platform",
-  "version": "2.6.1",
+  "version": "2.6.2",
   "description": "Tuya Open API integration for Homebridge with optional Matter support.",
   "main": "index.js",
   "scripts": {
-    "test": "mocha test/datautil.test.js && node --test test/matter_devices.test.js test/matter_bridge.test.js test/matter_integration.test.js test/wirelessswitch.test.js test/platform_errors.test.js test/package.test.js",
+    "test": "mocha test/datautil.test.js && node --test test/matter_devices.test.js test/matter_bridge.test.js test/matter_integration.test.js test/wirelessswitch.test.js test/platform_errors.test.js test/accessory_errors.test.js test/cloud_runtime.test.js test/verification.test.js test/package.test.js",
     "dev": "homebridge -D -U ./config/ -P .",
     "prepublishOnly": "npm test"
   },
@@ -22,6 +22,7 @@
   },
   "keywords": [
     "homebridge-plugin",
+    "supports-hap",
     "supports-matter",
     "matter"
   ],
@@ -36,23 +37,17 @@
     "url": "https://github.com/linanw/tuya-homebridge/issues"
   },
   "engines": {
-    "node": ">=22.0.0",
+    "node": ">=22.13.1",
     "homebridge": ">=1.11.4"
   },
   "devDependencies": {
     "homebridge": "2.4.0",
+    "chai": "^4.3.4",
     "mocha": "12.0.3"
   },
   "dependencies": {
-    "@clubedaentrega/cipher": "^1.0.0",
-    "aes-decrypter": "^3.1.2",
-    "axios": "^0.21.1",
-    "chai": "^4.3.4",
+    "axios": "^1.20.0",
     "crypto-js": "^4.0.0",
-    "js-base64": "^3.6.1",
-    "mqtt": "^4.2.6",
-    "string-cipher": "^1.0.8",
-    "text-encoding": "^0.7.0",
-    "uuid": "^8.3.2"
+    "mqtt": "^4.2.6"
   }
 }

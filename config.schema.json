@@ -2,7 +2,7 @@
   "pluginAlias": "TuyaPlatform",
   "pluginType": "platform",
   "singular": true,
-  "headerDisplay": "Upgraded Tuya Homebridge plugin, supported by linanw",
+  "headerDisplay": "Tuya cloud devices for HomeKit and optional Matter. Configure your own cloud project and linked app account before starting the plugin.",
   "footerDisplay": "",
   "schema": {
     "type": "object",
@@ -15,44 +15,54 @@
         "description": "You shouldn't need to change this."
       },
       "options": {
-        "title": "",
+        "title": "Tuya account and device options",
         "type": "object",
         "required": true,
         "properties": {
           "username": {
-            "title": "Username",
+            "title": "App account",
             "type": "string",
+            "minLength": 1,
+            "description": "The Tuya Smart or Smart Life account linked to your cloud project.",
             "required": true
           },
           "password": {
-            "title": "Password",
+            "title": "App password",
             "type": "string",
+            "password": true,
+            "minLength": 1,
             "required": true
           },
           "accessId": {
             "title": "Access ID",
             "type": "string",
+            "minLength": 1,
+            "description": "The Access ID / Client ID of your Tuya cloud project.",
             "required": true
           },
           "accessKey": {
-            "title": "Access Key",
+            "title": "Access Secret",
             "type": "string",
+            "password": true,
+            "minLength": 1,
+            "description": "The Access Secret / Client Secret of your Tuya cloud project.",
             "required": true
           },
           "lang": {
             "title": "Language Code",
             "type": "string",
             "default": "en",
-            "description": "Your two letter language code",
+            "pattern": "^[a-zA-Z]{2}$",
+            "description": "Two-letter language code used in Tuya API requests, for example en or zh.",
             "required": true
           },
           "projectType": {
             "title": "Project Type",
             "type": "string",
-            "default": "form",
+            "default": "2",
             "oneOf": [
               {
-                "title": "PaaS",
+                "title": "Smart Home PaaS",
                 "enum": ["2"]
               },
               {
@@ -60,12 +70,19 @@
                 "enum": ["1"]
               }
             ],
+            "description": "PaaS requires app schema and country code. Custom projects require an HTTPS endpoint.",
             "required": true
           },
-          "appSchema": {
-            "title": "PaaS Platform",
+          "endPoint": {
+            "title": "Custom project endpoint",
             "type": "string",
-            "default": "form",
+            "pattern": "^(https://[^\\s]+)?$",
+            "description": "Required only when Project Type is Custom (1). Enter your cloud project's HTTPS API endpoint, for example https://openapi.tuyaus.com. Leave blank for PaaS, which chooses its endpoint from the account country code."
+          },
+          "appSchema": {
+            "title": "PaaS app",
+            "type": "string",
+            "default": "smartlife",
             "oneOf": [
               {
                 "title": "Tuya Smart",
@@ -76,20 +93,71 @@
                 "enum": ["smartlife"]
               }
             ],
-            "required": true
+            "description": "Required for Smart Home PaaS (2). Choose the app containing your linked account and devices; unused for Custom projects."
           },
           "countryCode": {
             "title": "Country Code",
-            "type": "number",
-            "default": "",
-            "description": "Your two integer country code",
-            "required": true
+            "type": "integer",
+            "minimum": 1,
+            "description": "Required for Smart Home PaaS (2). Enter the dialing code for your app account's country, such as 1, 44 or 86; unused for Custom projects."
           },
           "debug": {
             "title": "Enable Debug Logging",
             "type": "boolean",
             "default": false,
+            "description": "Enable diagnostic logging when investigating a problem. Review logs before sharing them.",
             "required": true
+          },
+          "listDeviceId": {
+            "title": "List device IDs",
+            "type": "boolean",
+            "default": false,
+            "description": "Print discovered device IDs and names to help configure exclusions or driver overrides. Device identifiers may be private; disable after use."
+          },
+          "disabledDevice": {
+            "title": "Excluded devices",
+            "type": "array",
+            "description": "Devices with these Tuya IDs are not added to HomeKit or Matter.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "title": "Tuya device ID",
+                  "type": "string",
+                  "minLength": 1,
+                  "required": true
+                }
+              }
+            }
+          },
+          "accessoryType": {
+            "title": "Device driver overrides",
+            "type": "array",
+            "description": "Override the driver only when the detected Tuya category is incorrect. Supported capabilities depend on the selected driver and the device's actual datapoints.",
+            "items": {
+              "type": "object",
+              "properties": {
+                "id": {
+                  "title": "Tuya device ID",
+                  "type": "string",
+                  "minLength": 1,
+                  "required": true
+                },
+                "type": {
+                  "title": "Driver or Tuya category",
+                  "type": "string",
+                  "enum": [
+                    "AirPurifier", "Light", "Outlet", "Switch", "Fanv2",
+                    "SmokeSensor", "Heater", "GarageDoor", "WindowCovering",
+                    "ContactSensor", "LeakSensor", "WirelessSwitch", "Door",
+                    "kj", "dj", "dd", "fwd", "tgq", "xdd", "dc", "tgkg",
+                    "cz", "pc", "kg", "tdq", "fs", "fskg", "ywbj", "qn",
+                    "ckmkzq", "cl", "mcs", "rqbj", "jwbj", "wxkg"
+                  ],
+                  "required": true
+                }
+              }
+            }
           }
         }
       }

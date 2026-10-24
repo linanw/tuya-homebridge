@@ -164,6 +164,8 @@ test('native Matter endpoints control Tuya drivers and receive MQTT state', { ti
   platform.tuyaOpenApi.sendCommand = async () => { throw new Error('cloud unavailable'); };
   await assert.rejects(server.triggerCommand(channel.UUID, 'onOff', 'on'));
   assert.equal(server.getAccessoryState(channel.UUID, 'onOff').onOff, false);
+  assert.equal(errors.length, 1, 'the failed cloud command must be logged even without debug mode');
+  assert.match(errors.shift(), /\[SET\]/);
   platform.tuyaOpenApi.sendCommand = sender;
   await server.triggerCommand(channel.UUID, 'onOff', 'on');
 

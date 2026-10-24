@@ -20,12 +20,7 @@ const PLUGIN_NAME = require("./package.json").name;
 const LogUtil = require("./util/logutil");
 const DataUtil = require("./util/datautil");
 
-var Accessory, Service, Characteristic, mSpecifiedAccessoryType;
-
 module.exports = function (homebridge) {
-  Accessory = homebridge.platformAccessory;
-  Service = homebridge.hap.Service;
-  Characteristic = homebridge.hap.Characteristic;
   // registerAccessory' three parameters is plugin-name, accessory-name, constructor-name
   homebridge.registerPlatform(
     PLUGIN_NAME,
@@ -38,25 +33,23 @@ module.exports = function (homebridge) {
 // Accessory constructor
 class TuyaPlatform {
   constructor(log, config, api) {
-    this.log = new LogUtil(config && config.options && config.options.debug);
     this.logger = log;
+    this.log = new LogUtil(config && config.options && config.options.debug, log);
     this.config = config;
-    if (!config || !config.options) {
-      this.log.log("The config configuration is incorrect, disabling plugin.");
-      return;
-    }
-    mSpecifiedAccessoryType = config.options.accessoryType;
-    if (mSpecifiedAccessoryType && Array.isArray(mSpecifiedAccessoryType)) {
-      this.log.log(
-        "mSpecifiedAccessoryType: ",
-        JSON.stringify(mSpecifiedAccessoryType)
-      );
-    } else {
-      mSpecifiedAccessoryType = undefined;
-    }
+    const options = config && config.options;
+    this.specifiedAccessoryTypes = options && Array.isArray(options.accessoryType) ? options.accessoryType : [];
     this.deviceAccessories = new Map();
     this.accessories = new Map();
+    this.api = api;
     this.matterBridge = new MatterBridge(api, log);
+    if (options) this.log.addSecrets(options.accessId, options.accessKey, options.username, options.password);
+    const missing = this.configurationErrors(options);
+    this.configured = missing.length === 0;
+    if (!this.configured) {
+      const message = `TuyaPlatform is not configured; set ${missing.join(", ")} in the plugin settings. No Tuya connection was started.`;
+      if (log && typeof log.warn === "function") log.warn(message);
+      return;
+    }
 
     if (api) {
       // Save the API object as plugin needs to register new accessory via this object
@@ -80,7 +73,30 @@ class TuyaPlatform {
     }
   }
 
+  configurationErrors(options) {
+    if (!options || typeof options !== "object") return ["options"];
+    const errors = ["username", "password", "accessId", "accessKey"].filter(key =>
+      typeof options[key] !== "string" || !options[key].trim()
+    );
+    const projectType = String(options.projectType || "2");
+    if (!["1", "2"].includes(projectType)) errors.push("projectType (1 or 2)");
+    if (projectType === "1") {
+      try {
+        const endpoint = new URL(options.endPoint);
+        if (endpoint.protocol !== "https:" || endpoint.username || endpoint.password) throw new Error();
+      } catch {
+        errors.push("endPoint (HTTPS URL for a Custom project)");
+      }
+    } else if (projectType === "2") {
+      if (typeof options.appSchema !== "string" || !["tuyasmart", "smartlife"].includes(options.appSchema.toLowerCase())) errors.push("appSchema (tuyaSmart or smartlife)");
+      const countryCode = Number(options.countryCode);
+      if (!["string", "number"].includes(typeof options.countryCode) || !Number.isInteger(countryCode) || countryCode < 1) errors.push("countryCode");
+    }
+    return errors;
+  }
+
   async initTuyaSDK(config) {
+    if (!this.configured) return;
     let devices;
     let api;
     if (config.options.projectType == "1") {
@@ -88,7 +104,8 @@ class TuyaPlatform {
         config.options.endPoint,
         config.options.accessId,
         config.options.accessKey,
-        this.log
+        this.log,
+        config.options.lang || "en"
       );
       this.tuyaOpenApi = api;
       //login before everything start
@@ -107,8 +124,9 @@ class TuyaPlatform {
         config.options.username,
         config.options.password,
         config.options.countryCode,
-        config.options.appSchema,
-        this.log
+        config.options.appSchema.toLowerCase() === "tuyasmart" ? "tuyaSmart" : "smartlife",
+        this.log,
+        config.options.lang || "en"
       );
       this.tuyaOpenApi = api;
 
@@ -172,7 +190,7 @@ class TuyaPlatform {
   }
 
   reportError(action, error, device) {
-    const detail = error && typeof error.message === "string" ? error.message : "Unknown error";
+    const detail = this.log.safeErrorMessage(error);
     let identity = "";
     if (device) {
       const id = device.id || device.devId || (device.bizData && device.bizData.devId) || "unknown";
@@ -191,8 +209,8 @@ class TuyaPlatform {
 
   async addAccessory(device) {
     var deviceType = device.category;
-    if (mSpecifiedAccessoryType && mSpecifiedAccessoryType.length > 0) {
-      const specifiedDevice = mSpecifiedAccessoryType.filter((item) => {
+    if (this.specifiedAccessoryTypes.length > 0) {
+      const specifiedDevice = this.specifiedAccessoryTypes.filter((item) => {
         return item.id == device.id;
       });
       if (specifiedDevice.length > 0) {

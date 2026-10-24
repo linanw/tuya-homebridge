@@ -4,6 +4,30 @@ Release notes are available in English and Simplified Chinese. Homebridge UI's *
 
 以下提供英文和简体中文更新说明。Homebridge 插件管理的 **What's New / 更新说明** 读取对应版本的 [GitHub Release](https://github.com/linanw/tuya-homebridge/releases)；后续 npm 包也会包含本更新日志。
 
+## [2.6.2] - 2026-10-24
+
+### English
+
+- Declare both HomeKit (`supports-hap`) and native Matter transports, so Homebridge UI does not classify the plugin as Matter-only.
+- Validate credentials and project-specific settings before starting cloud login, device discovery, or MQTT. Pass the selected language to both Tuya clients.
+- Improve the settings GUI with masked password/access-secret inputs, valid project/app defaults, HTTPS Custom-project endpoints, and existing device override/disable options.
+- Omit authentication payloads from diagnostics, redact known credentials, bound HTTP requests, and reject cloud command failures instead of reporting false success.
+- Handle MQTT connection, decoding, and listener failures; cancel renewal timers and close connections on shutdown. Verify MQTT GCM authentication tags.
+- Return an immediate communication error for unavailable accessory state instead of leaving HomeKit reads waiting indefinitely, and recover on subsequent device updates.
+- Update Axios, use Node's built-in UUID generation, and remove unused production dependencies. Add supported-Node CI and verification readiness checks.
+- Prepare an honest Homebridge verification request, including comparison with existing verified Tuya plugins. This release is **not certified or approved**; verification is decided by the Homebridge team.
+
+### 简体中文
+
+- 同时声明 HomeKit（`supports-hap`）和原生 Matter 协议，避免 Homebridge 插件管理误判为仅支持 Matter。
+- 在启动云端登录、设备发现和 MQTT 前校验账号及项目专用配置；向两种涂鸦客户端传递所选语言。
+- 完善设置界面：密码和 Access Secret 掩码、有效的项目/应用默认值、Custom 项目 HTTPS 端点，以及现有设备禁用和类型覆盖选项。
+- 诊断信息不再输出鉴权请求内容，并对已知凭据脱敏；限制 HTTP 请求等待时间，云端控制失败时明确报错。
+- 捕获 MQTT 连接、解密和消息回调错误，关闭时取消续期定时器并结束连接；校验 MQTT GCM 认证标签。
+- 配件状态不可用时立即返回通信错误，避免 HomeKit 读取一直等待；收到后续设备状态后可恢复。
+- 更新 Axios，使用 Node 内置 UUID，移除未使用的生产依赖；增加 Node 兼容性 CI 和认证准备检查。
+- 准备如实说明同类已认证插件差异的 Homebridge 认证申请。此版本**尚未认证或获批**，最终由 Homebridge 团队评审决定。
+
 ## [2.6.1] - 2026-10-24
 
 ### English

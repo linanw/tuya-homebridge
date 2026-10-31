@@ -119,6 +119,9 @@ test('authenticated HTTP uses cached snapshots and confirms one conditional clou
     assert.equal(calls.writes.length, 1);
     const changed = copy(operation); changed.operation.name = 'Another name';
     assert.equal((await request(address, { method: 'POST', target: '/v1/metadata/commands', body: changed })).status, 409);
+    // A confirmed in-memory receipt may precede the final atomic disk rename.
+    // Drain the coordinator before asserting the completed storage contents.
+    await coordinator.close();
     const files = await fs.readdir(directory);
     assert.equal(files.length, 1);
     const persisted = JSON.parse(await fs.readFile(path.join(directory, files[0]), 'utf8'));

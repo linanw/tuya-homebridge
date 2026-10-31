@@ -1,6 +1,10 @@
 # Metadata Sync v1 (implementation contract)
 
-This contract is implemented by stable plugin **2.7.0** on npm's `latest` channel, using the beta.3 runtime without new runtime changes. The service is disabled by default and cloud writes require separate `allowWrites`. Native Matter continues to control devices; the authenticated metadata service is a separate integration for the Mac HomeKit test companion and compatible Matter controllers. It does not obtain Apple/Google private home information through Matter. See [installation and single-device testing](SETUP.md).
+This contract is implemented by stable plugin **2.8.0** on npm's `latest` channel. The service is disabled by default and cloud writes require separate `allowWrites`. Native Matter continues to control devices; the authenticated metadata service is a separate integration for the Mac HomeKit test companion and compatible Matter controllers. It does not obtain Apple/Google private home information through Matter. See [installation and single-device testing](SETUP.md).
+
+Version 2.8.0 adds read-only standard `hps` occupancy through HAP/Matter without requiring this service. Metadata schema version 1 and the existing read/rename capabilities are unchanged; device moves remain disabled. Mac and desktop clients remain test versions.
+
+2.8.0 新增标准 `hps` 的只读 HAP/Matter 占用状态，无需开启元数据服务。元数据 schema version 1 及已有读取/改名范围不变，设备移房仍禁用，Mac 与桌面客户端仍为测试版。
 
 Version 2.7.0 fixes native window-covering confirmation and legacy cached movement by leaving derived motion to Homebridge while retaining exact position/configuration checks. It also corrects lighting error context and reports when Tuya API returns `2001` (device offline), without changing command payloads. Metadata schema version 1, device identities and pairings stay intact; Mac and desktop clients remain test versions.
 

@@ -9,13 +9,11 @@
 
 ## What's New / 更新日志
 
-**2.7.0** 将 beta.3 的运行代码提升为稳定 `latest` 版本。相对 2.6.2，修复可能触发 `1004 sign invalid` 的 query 签名、Matter 窗帘状态确认超时，以及窗帘到位后旧缓存残留的运动状态。设备指令、端点与配对保持原样。
-
-照明错误日志显示实际失败的特征，`2001` 明确提示**涂鸦 API 报告设备离线**，不修改指令内容。beta.3 的实机冒烟验证已获正常反馈。
+**2.8.0** 新增涂鸦标准 `hps` 类别的人体存在传感器，以只读方式映射到 HomeKit `OccupancySensor` 与 Matter `OccupancySensing`。人员静止时仍保持有人，直到设备报告 `none`，不会用定时器自动清除。详见[支持的状态与驱动覆盖](#人体存在传感器)。
 
 可选[元数据服务](docs/metadata-sync/SETUP.md)默认关闭。另行开启 `allowWrites` 后，PaaS 可写设备名和房间名，Custom 仅可写设备名；设备移房仍禁用。Mac 伴侣及 [MatterDesk 0.7.0-beta.1 / MatterCamViewer 2.5.0-beta.1 客户端](https://github.com/linanw/MatterDesk/blob/matterdesk-v0.7.0-beta.1/docs/TUYA_METADATA_SYNC.md)仍为测试版，实际账号权限可能不同。
 
-升级说明见 [2.7.0 正式 Release](https://github.com/linanw/tuya-homebridge/releases/tag/v2.7.0) 与 [CHANGELOG.md](CHANGELOG.md)。npm `beta` 标签保留 beta.3 历史，正式安装使用 `latest`。
+升级说明见 [2.8.0 正式 Release](https://github.com/linanw/tuya-homebridge/releases/tag/v2.8.0) 与 [CHANGELOG.md](CHANGELOG.md)。npm `beta` 标签保留 beta.3 历史，正式安装使用 `latest`。
 
 **2.6.2** 为 Homebridge 认证评审做准备，完善账号配置校验和设置界面，并明确声明同时支持 HAP 与 Matter。
 
@@ -37,17 +35,17 @@
 
 Tuya 设备的控制和状态通知仍依赖涂鸦云服务。启用 Matter 不会将这些设备转换为完全离线的本地设备，也不会让设备本身获得原生 Matter 固件。
 
-## 更新至 2.7.0 正式版
+## 更新至 2.8.0 正式版
 
-在 Homebridge UI 正常更新插件，或通过 **⋮ → 管理版本**选择 **2.7.0**；beta 用户也可通过此入口切回正式版。CLI 必须在实际运行 Homebridge 的同一套 Node/npm 环境或容器中执行：
+在 Homebridge UI 正常更新插件，或通过 **⋮ → 管理版本**选择 **2.8.0**；beta 用户也可通过此入口切回正式版。CLI 必须在实际运行 Homebridge 的同一套 Node/npm 环境或容器中执行：
 
 ```sh
 npm install -g @linanw/homebridge-tuya-platform@latest
 # 固定正式版本：
-npm install -g @linanw/homebridge-tuya-platform@2.7.0
+npm install -g @linanw/homebridge-tuya-platform@2.8.0
 ```
 
-随后重启现有 Homebridge 服务，保留配置、子桥身份、存储和配对，无需清空缓存或重新配对。
+随后重启现有 Homebridge 服务，保留配置、子桥身份、存储和配对，无需清空缓存或重新配对。Docker Homebridge 请通过原容器的 UI 更新，或在该容器内执行 npm；在 Docker 宿主机安装不会更新容器内插件。
 
 元数据服务默认关闭。按[联调指南](docs/metadata-sync/SETUP.md)将独立令牌配置到 Homebridge 服务进程环境；跨机器访问使用受客户端信任的 HTTPS。先选一个设备完成读取、绑定，再决定是否开启写入。npm 包包含服务与协议文档，Mac 伴侣和可选 Node 适配器需从对应 GitHub 标签另外获取。
 
@@ -117,6 +115,31 @@ Homebridge UI 可编辑 `options` 下的以下设置：
 | `listDeviceId` | 临时列出设备名称和 ID，便于配置排除项或驱动覆盖；用完后关闭。 |
 | `lang` | Tuya API 请求的双字母语言代码，例如 `en` 或 `zh`。 |
 | `debug` | 诊断日志，默认关闭。 |
+
+### 人体存在传感器
+
+按[涂鸦官方标准](https://developer.tuya.com/en/docs/iot/s?id=K9j2w4p710ge9)，类别为 `hps` 时自动选择人体存在驱动，读取 **Enum 枚举**数据点 `presence_state`：
+
+| 值 | HomeKit / Matter 占用状态 |
+| --- | --- |
+| `none` | 无人 |
+| `presence`、`peaceful`、`small_move`、`large_move` | 有人 |
+
+人员静止时保持有人，直到收到有效的 `none`，不使用定时器伪造无人。布尔类型的自检结果不会被当作存在状态。采用其他数据点或值类型的厂商变体不保证支持，也不会自动猜测。
+
+新传感器在首次有效上报后加入家庭平台。后续无效上报会保留最后确认的占用值，并将 HomeKit 状态标记为非活动／故障，不生成新的无人状态；有效上报后自动恢复。
+
+其他类别若仍提供这个标准枚举数据点，可在 Homebridge UI 的驱动覆盖中选择 `HumanPresenceSensor`、`OccupancySensor` 或 `hps`。使用 JSON 时，将以下片段合并到原平台的 `options`，替换占位设备 ID：
+
+```json
+{
+  "accessoryType": [
+    { "id": "TUYA_DEVICE_ID", "type": "HumanPresenceSensor" }
+  ]
+}
+```
+
+覆盖只选择驱动，不转换厂商专用数据点。本版仅上报占用状态，不提供灵敏度、距离、延时、自检控制或电池上报。Matter 要求 Homebridge 2.4+，使用通用 `Other` 检测特性并提供占用事件。若旧缓存的占用集群特性不兼容，会以原配件 UUID 和端点号重建，保留已有配对存储即可。
 
 ## 从旧包迁移
 
@@ -195,6 +218,7 @@ Homebridge 与控制器应处于同一局域网，并具有可用的 IPv6 和 mD
 | 灯 | 按设备实际能力提供开关、亮度、色温和彩色控制 |
 | 开关、插座 | 多通道分别控制 |
 | 门窗接触传感器 | 打开、关闭状态 |
+| 人体存在（`hps`） | 只读占用状态，包含静止有人 |
 | 烟雾传感器 | 烟雾报警状态 |
 | 风扇 | 电源和风速 |
 | 窗帘 | 位置及设备支持的移动控制 |
@@ -224,13 +248,13 @@ npx homebridge -D -U /path/to/local/homebridge-storage -P .
 
 ### 发布更新说明
 
-在 `CHANGELOG.md` 中添加与 `package.json` 版本一致的中英文条目，提交后推送对应标签。正式版 2.7.0 使用 `v2.7.0` 和 npm `latest` 标签，原 beta 标签保留历史。Release 工作流会运行测试并创建对应 GitHub Release。Homebridge 插件管理通过 `v2.7.0` Release 正文显示 **What's New / 更新说明**，通过对应标签内的更新日志显示 Changelog。npm 发布与附件上传是独立步骤。
+在 `CHANGELOG.md` 中添加与 `package.json` 版本一致的中英文条目，提交后推送对应标签。正式版 2.8.0 使用 `v2.8.0` 和 npm `latest` 标签，原 beta 标签保留历史。Release 工作流会运行测试并创建对应 GitHub Release。Homebridge 插件管理通过 `v2.8.0` Release 正文显示 **What's New / 更新说明**，通过对应标签内的更新日志显示 Changelog。npm 发布与附件上传是独立步骤。
 
 ### 常见 Tuya Open API 错误
 
 | 错误码 | 含义 | 排查方向 |
 | --- | --- | --- |
-| `1004` | `sign invalid` | 先升级 **2.7.0** 并重启现有服务，保留凭据、存储与配对。若仍报错，提供版本及脱敏错误行。静态 `operation` 标签如 `account login`（登录）、`associated device list`（设备列表）、`batch device functions`（批量功能）用于定位步骤，不含 URL 或设备 ID。分享前检查日志。 |
+| `1004` | `sign invalid` | 先升级 **2.8.0** 并重启现有服务，保留凭据、存储与配对。若仍报错，提供版本及脱敏错误行。静态 `operation` 标签如 `account login`（登录）、`associated device list`（设备列表）、`batch device functions`（批量功能）用于定位步骤，不含 URL 或设备 ID。分享前检查日志。 |
 | `2001` | `device is offline` | 涂鸦 API 报告设备离线，见[官方错误码](https://developer.tuya.com/en/docs/iot/error-code?id=K989ruxx88swc)。即使 App 通过移动数据仍可控，也应核对云项目中同一设备的 `online` 状态、关联账号与数据中心。插件增加静态 `device command` 标签与清晰错误，不修改亮度指令。 |
 | `1106` | `permission deny` | 检查应用账号与云项目的关联、账号密码、数据中心、国家代码及 `appSchema`；第三方登录账号请参考涂鸦的账号关联要求。 |
 | `1100` | `param is empty` | 检查 `username`、`appSchema` 等必填字段。 |

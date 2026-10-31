@@ -2,9 +2,10 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 const { createMatterDevice } = require('../lib/matter_devices');
 
-const serviceNames = ['Lightbulb', 'Switch', 'Outlet', 'ContactSensor', 'LeakSensor', 'SmokeSensor', 'Fanv2', 'WindowCovering', 'HeaterCooler', 'AirPurifier', 'GarageDoorOpener', 'StatelessProgrammableSwitch'];
-const characteristicNames = ['On', 'Brightness', 'Hue', 'Saturation', 'ColorTemperature', 'ContactSensorState', 'LeakDetected', 'SmokeDetected', 'StatusLowBattery', 'BatteryLevel', 'Active', 'TargetFanState', 'RotationSpeed', 'TargetPosition', 'CurrentPosition', 'PositionState', 'HoldPosition'];
+const serviceNames = ['Lightbulb', 'Switch', 'Outlet', 'ContactSensor', 'OccupancySensor', 'LeakSensor', 'SmokeSensor', 'Fanv2', 'WindowCovering', 'HeaterCooler', 'AirPurifier', 'GarageDoorOpener', 'StatelessProgrammableSwitch'];
+const characteristicNames = ['On', 'Brightness', 'Hue', 'Saturation', 'ColorTemperature', 'ContactSensorState', 'OccupancyDetected', 'LeakDetected', 'SmokeDetected', 'StatusLowBattery', 'BatteryLevel', 'Active', 'TargetFanState', 'RotationSpeed', 'TargetPosition', 'CurrentPosition', 'PositionState', 'HoldPosition'];
 const deviceTypeNames = ['OnOffLight', 'DimmableLight', 'ColorTemperatureLight', 'ExtendedColorLight', 'OnOffSwitch', 'OnOffOutlet', 'ContactSensor', 'LeakSensor', 'SmokeSensor', 'Fan', 'WindowCovering'];
+const occupancyFeatureNames = ['Other', 'PassiveInfrared', 'Ultrasonic', 'PhysicalContact', 'ActiveInfrared', 'Radar', 'RfSensing', 'Vision', 'OccupancyEvent'];
 
 function fixture(type, values, accessory = {}) {
   const writes = [];
@@ -16,6 +17,24 @@ function fixture(type, values, accessory = {}) {
     matter: {
       deviceTypes: Object.fromEntries(deviceTypeNames.map(name => [name, { name }])),
       status: { ConstraintError: class ConstraintError extends Error {}, InvalidAction: class InvalidAction extends Error {} },
+    },
+  };
+  const occupancySensingServer = {
+    with(...selected) {
+      for (const name of selected) assert.ok(occupancyFeatureNames.includes(name), `unknown occupancy feature ${name}`);
+      return {
+        features: Object.fromEntries(occupancyFeatureNames.map(name => [
+          name[0].toLowerCase() + name.slice(1), selected.includes(name),
+        ])),
+      };
+    },
+  };
+  api.matter.deviceRequirements = { MotionSensor: { OccupancySensingServer: occupancySensingServer } };
+  api.matter.deviceTypes.MotionSensor = {
+    name: 'OccupancySensor',
+    behaviors: { occupancySensing: occupancySensingServer.with('PassiveInfrared', 'OccupancyEvent') },
+    with(behavior) {
+      return { ...this, behaviors: { ...this.behaviors, occupancySensing: behavior } };
     },
   };
   const characteristics = new Map(Object.entries(values).map(([name, value]) => [name, {
@@ -219,6 +238,102 @@ test('contact sensors invert HAP open/closed state for Matter BooleanState', () 
   context.characteristics.get('ContactSensorState').value = 1;
   assert.equal(mapping.getState().booleanState.stateValue, false);
   assert.deepEqual(mapping.handlers, {});
+});
+
+test('presence sensors explicitly replace default PIR with read-only Other occupancy sensing', () => {
+  const context = fixture('OccupancySensor', { OccupancyDetected: 1 });
+  context.characteristics.get('OccupancyDetected').listenerCount = () => 0;
+  const mapping = context.mapping();
+  const features = {
+    other: true, passiveInfrared: false, ultrasonic: false, physicalContact: false,
+    activeInfrared: false, radar: false, rfSensing: false, vision: false, occupancyEvent: true,
+  };
+  assert.equal(context.api.matter.deviceTypes.MotionSensor.behaviors.occupancySensing.features.passiveInfrared, true);
+  assert.equal(mapping.deviceType.name, 'OccupancySensor');
+  assert.deepEqual(mapping.deviceType.behaviors.occupancySensing.features, features);
+  assert.deepEqual(mapping.occupancySensingFeatures, features);
+  assert.deepEqual(mapping.handlers, {});
+  assert.deepEqual(mapping.getState(), { occupancySensing: {
+    occupancy: { occupied: true },
+    occupancySensorType: 0,
+    occupancySensorTypeBitmap: { pir: false, ultrasonic: false, physicalContact: false },
+  } });
+  context.characteristics.get('OccupancyDetected').value = 0;
+  assert.equal(mapping.getState().occupancySensing.occupancy.occupied, false);
+  assert.deepEqual(Object.keys(mapping.getState()), ['occupancySensing']);
+  assert.deepEqual(context.writes, []);
+});
+
+test('presence cache validity gates reports without discarding the endpoint mapping', () => {
+  let valid = false;
+  const context = fixture('OccupancySensor', { OccupancyDetected: 0 }, {
+    controller: { hasValidCache: () => valid },
+  });
+  const mapping = context.mapping();
+  assert.ok(mapping);
+  assert.deepEqual(mapping.getState(), {});
+  valid = true;
+  context.characteristics.get('OccupancyDetected').value = 1;
+  assert.equal(mapping.getState().occupancySensing.occupancy.occupied, true);
+  valid = false;
+  context.characteristics.get('OccupancyDetected').value = 0;
+  assert.deepEqual(mapping.getState(), {});
+  valid = true;
+  assert.equal(mapping.getState().occupancySensing.occupancy.occupied, false);
+  assert.deepEqual(context.writes, []);
+});
+
+test('invalid presence values never become invented unoccupied reports', () => {
+  for (const value of [null, undefined, NaN, Infinity, -1, 2, '0', '1', true, false, {}, []]) {
+    const context = fixture('OccupancySensor', { OccupancyDetected: value });
+    const mapping = context.mapping();
+    assert.ok(mapping);
+    assert.deepEqual(mapping.getState(), {});
+    context.characteristics.get('OccupancyDetected').value = 1;
+    assert.equal(mapping.getState().occupancySensing.occupancy.occupied, true);
+    context.characteristics.get('OccupancyDetected').value = value;
+    assert.deepEqual(mapping.getState(), {});
+    assert.deepEqual(context.writes, []);
+  }
+});
+
+test('presence requires public feature composition and never falls back to default PIR', () => {
+  for (const remove of [
+    api => { delete api.matter.deviceTypes.MotionSensor; },
+    api => { delete api.matter.deviceTypes.MotionSensor.with; },
+    api => { delete api.matter.deviceRequirements; },
+    api => { delete api.matter.deviceRequirements.MotionSensor; },
+    api => { delete api.matter.deviceRequirements.MotionSensor.OccupancySensingServer; },
+    api => { delete api.matter.deviceRequirements.MotionSensor.OccupancySensingServer.with; },
+  ]) {
+    const context = fixture('OccupancySensor', { OccupancyDetected: 1 });
+    remove(context.api);
+    assert.equal(context.mapping(), undefined);
+    assert.deepEqual(context.writes, []);
+  }
+});
+
+test('presence requires its reported occupancy characteristic', () => {
+  const context = fixture('OccupancySensor', { On: true, Active: 1 });
+  assert.equal(context.mapping(), undefined);
+  assert.equal(context.characteristics.has('OccupancyDetected'), false);
+  assert.deepEqual(context.writes, []);
+});
+
+test('presence retains battery reports independently of occupancy cache validity', () => {
+  let valid = true;
+  const context = fixture('OccupancySensor', { OccupancyDetected: 1, BatteryLevel: 75, StatusLowBattery: 0 }, {
+    controller: { hasValidCache: () => valid },
+  });
+  const mapping = context.mapping();
+  assert.equal(mapping.getState().powerSource.batPercentRemaining, 150);
+  assert.equal(mapping.getState().powerSource.batChargeLevel, 0);
+  context.characteristics.get('StatusLowBattery').value = 1;
+  assert.equal(mapping.getState().powerSource.batReplacementNeeded, true);
+  valid = false;
+  assert.equal(Object.hasOwn(mapping.getState(), 'occupancySensing'), false);
+  assert.equal(mapping.getState().powerSource.batPercentRemaining, 150);
+  assert.deepEqual(context.writes, []);
 });
 
 test('water leaks and smoke retain alarm semantics and do not invent CO detection', () => {

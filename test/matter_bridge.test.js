@@ -75,6 +75,121 @@ async function flush(bridge) {
   await bridge.queue;
 }
 
+function presenceFixture() {
+  const context = fixture();
+  const { bridge, power, accessory, service } = context;
+  let valid = true;
+  service.UUID = 'presence';
+  context.api.hap.Service.OccupancySensor = { UUID: service.UUID };
+  power.value = power.readValue = 1;
+  const features = { other: true, passiveInfrared: false, occupancyEvent: true };
+  const info = { id: 'bridgedDeviceBasicInformation', set: defaults => ({ id: 'bridgedDeviceBasicInformation', defaults }) };
+  context.api.matter.deviceTypes.BridgedNode = { behaviors: { bridgedDeviceBasicInformation: info } };
+  const type = { name: 'PresenceSensor', with: behavior => ({ name: 'PresenceSensor', composed: behavior }) };
+  const register = context.api.matter.registerPlatformAccessories;
+  context.api.matter.registerPlatformAccessories = async (...args) => {
+    await register(...args);
+    for (const descriptor of args[2]) {
+      context.states.get(descriptor.UUID).occupancySensing.featureMap = { ...features };
+    }
+  };
+  bridge.deviceFactory = () => ({
+    deviceType: type,
+    occupancySensingFeatures: features,
+    getState: () => valid ? { occupancySensing: {
+      occupancy: { occupied: power.value === 1 }, occupancySensorType: 0,
+      occupancySensorTypeBitmap: { pir: false, ultrasonic: false, physicalContact: false },
+    } } : {},
+    handlers: {},
+  });
+  return { ...context, features, setValid: value => { valid = value; }, uuid: bridge.uuid(accessory, service) };
+}
+
+test('unknown presence keeps its expected identity without registering a default vacant state', async () => {
+  const { bridge, calls, power, accessory, states, setValid, uuid } = presenceFixture();
+  setValid(false);
+  let reads = 0;
+  const read = power.getValue;
+  power.getValue = callback => { reads++; read.call(power, callback); };
+  await bridge.reconcileAccessories([accessory]);
+  assert.equal(reads, 0, 'an unknown source must not invoke a getter that cannot return physical state');
+  assert.equal(calls.registered.length, 0);
+  setValid(true);
+  await bridge.addAccessory(accessory);
+  assert.equal(states.get(uuid).occupancySensing.occupancy.occupied, true);
+  setValid(false);
+  power.value = 0; // Even a stale/default HAP value must not replace native truth.
+  power.emit('change');
+  await flush(bridge);
+  await bridge.reconcileAccessories([accessory]);
+  assert.equal(states.get(uuid).occupancySensing.occupancy.occupied, true);
+  assert.equal(calls.removed.length, 0);
+  assert.equal(calls.registered.length, 1);
+  setValid(true);
+  power.emit('change');
+  await flush(bridge);
+  assert.equal(states.get(uuid).occupancySensing.occupancy.occupied, false);
+  assert.deepEqual(calls.errors, []);
+  await bridge.close();
+});
+
+test('waits for the corrected presence features during an atomic native cached replacement', async () => {
+  const { api, bridge, calls, accessory, service, states, setValid, features, uuid } = presenceFixture();
+  const cached = { UUID: uuid, context: { homebridgeUUID: accessory.UUID }, clusters: { occupancySensing: {} } };
+  bridge.configureAccessory(cached);
+  states.set(uuid, { occupancySensing: {
+    featureMap: { passiveInfrared: true, occupancyEvent: true }, occupancy: { occupied: false },
+  }, bridgedDeviceBasicInformation: { uniqueId: 'native-presence-identity' } });
+  setValid(false);
+  accessory.controller = { service, serviceDetached: true };
+  accessory.services = [];
+  await bridge.reconcileAccessories([accessory]);
+  assert.equal(calls.removed.length, 0, 'unknown source must retain a cached endpoint until valid data arrives');
+  assert.equal(calls.registered.length, 0);
+  api.matter.registerPlatformAccessories = async (plugin, platform, descriptors) => {
+    calls.registered.push({ plugin, platform, descriptors });
+    assert.equal(descriptors[0].deviceType.composed.id, 'bridgedDeviceBasicInformation');
+    assert.deepEqual(descriptors[0].deviceType.composed.defaults, { uniqueId: 'native-presence-identity' },
+      'the observed native identity must be supplied before the replacement is constructed');
+    // Native registration must finish closing the old endpoint and compose
+    // the corrected features; the public facade returns before this happens.
+    setTimeout(() => states.set(uuid, { occupancySensing: {
+      ...structuredClone(descriptors[0].clusters.occupancySensing), featureMap: { ...features },
+    } }), 25);
+  };
+  const update = api.matter.updateAccessoryState;
+  api.matter.updateAccessoryState = async (...args) => {
+    assert.equal(states.get(uuid).occupancySensing.featureMap.other, true,
+      'source synchronization must not race the old PIR endpoint during replacement');
+    return update(...args);
+  };
+  setValid(true);
+  accessory.controller.serviceDetached = false;
+  accessory.services = [service];
+  await bridge.addAccessory(accessory);
+  assert.equal(calls.removed.length, 0, 'replacement must use one native registration, not two fire-and-forget lifecycle calls');
+  assert.equal(calls.registered[0].descriptors[0].UUID, uuid);
+  assert.equal(states.get(uuid).occupancySensing.occupancy.occupied, true);
+  await bridge.addAccessory(accessory);
+  assert.equal(calls.removed.length, 0, 'normal observations must never rebuild a live endpoint');
+  assert.equal(calls.registered.length, 1);
+  assert.deepEqual(calls.errors, []);
+  await bridge.close();
+});
+
+test('does not rebuild matching presence features or infer a mismatch from unavailable native state', async () => {
+  for (const map of [{ other: true, occupancyEvent: true }, undefined]) {
+    const { bridge, calls, accessory, states, uuid } = presenceFixture();
+    bridge.configureAccessory({ UUID: uuid, context: { homebridgeUUID: accessory.UUID } });
+    states.set(uuid, { occupancySensing: { featureMap: map } });
+    await bridge.addAccessory(accessory);
+    assert.equal(calls.removed.length, 0);
+    assert.equal(calls.registered.length, 1);
+    assert.deepEqual(calls.errors, []);
+    await bridge.close();
+  }
+});
+
 test('leaves Homebridge 1 and Matter-disabled bridges operational', async () => {
   const first = new MatterBridge({}, { error: assert.fail }, () => assert.fail('unexpected mapping'));
   await first.addAccessory({});

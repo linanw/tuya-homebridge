@@ -4,6 +4,26 @@ Release notes are available in English and Simplified Chinese. Homebridge UI's *
 
 以下提供英文和简体中文更新说明。Homebridge 插件管理的 **What's New / 更新说明** 读取对应版本的 [GitHub Release](https://github.com/linanw/tuya-homebridge/releases)；后续 npm 包也会包含本更新日志。
 
+## [2.8.0] - 2026-10-31
+
+### English
+
+- Add automatic support for Tuya's standard `hps` human-presence category through read-only HomeKit `OccupancySensor` and Matter `OccupancySensing`.
+- Read the standard Enum `presence_state`: `none` means unoccupied; `presence`, `peaceful`, `small_move` and `large_move` mean occupied. Stationary occupancy persists until the device reports `none`, without a synthetic clearing timer.
+- Publish a new sensor after its first valid reading; retain its last confirmed state and mark HomeKit inactive/faulted on invalid reports, including full accessory-list reads.
+- Exclude Boolean self-test values from occupancy interpretation. Other vendor datapoints/types are not automatically inferred. Driver overrides `HumanPresenceSensor`, `OccupancySensor` and `hps` still require the standard Enum; no sensitivity, distance, delay, self-test or battery features are added.
+- Use the generic Matter `Other` detector feature with occupancy events. Rebuild incompatible cached feature layouts with the same accessory UUID and endpoint number, preserving pairing storage.
+- Update the stable installation guide to 2.8.0, including Docker Homebridge UI upgrades. The metadata service, schema version 1 and opt-in write scope are unchanged; Mac and desktop clients remain test versions. See the [presence setup](README.md#human-presence-sensors) and [official Tuya standard](https://developer.tuya.com/en/docs/iot/s?id=K9j2w4p710ge9).
+
+### 简体中文
+
+- 新增涂鸦标准 `hps` 人体存在类别的自动适配，以只读方式映射到 HomeKit `OccupancySensor` 与 Matter `OccupancySensing`。
+- 读取标准 Enum 枚举 `presence_state`：`none` 表示无人，`presence`、`peaceful`、`small_move`、`large_move` 均表示有人。人员静止时持续保持有人，直到设备报告 `none`，不以定时器伪造清除。
+- 新传感器首次有效读取后才发布；无效上报时保留最后确认值并标记 HomeKit 非活动／故障，包含完整配件列表读取场景。
+- 布尔自检值不参与占用判断，不自动猜测其他厂商数据点或类型。`HumanPresenceSensor`、`OccupancySensor`、`hps` 驱动覆盖仍要求标准枚举；不新增灵敏度、距离、延时、自检或电池功能。
+- Matter 使用通用 `Other` 检测特性与占用事件。旧缓存特性不兼容时以相同配件 UUID 和端点号重建，保留配对存储。
+- 正式版安装指引更新为 2.8.0，包含 Docker Homebridge UI 升级方式。元数据服务、schema version 1 和写入范围不变，Mac 与桌面客户端仍为测试版。详见[人体存在配置](README.zh-CN.md#人体存在传感器)及[涂鸦官方标准](https://developer.tuya.com/en/docs/iot/s?id=K9j2w4p710ge9)。
+
 ## [2.7.0] - 2026-10-24
 
 ### English

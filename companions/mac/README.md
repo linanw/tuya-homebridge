@@ -6,9 +6,9 @@ This is an iPad / **Mac Catalyst** HomeKit app, not a native macOS HomeKit execu
 
 ## Beta source and installation / beta 源码
 
-Use the companion source from [plugin tag v2.7.0](https://github.com/linanw/tuya-homebridge/tree/v2.7.0/companions/mac), with the [2.7.0 server setup](https://github.com/linanw/tuya-homebridge/blob/v2.7.0/docs/metadata-sync/SETUP.md). The plugin is published through npm's stable `latest` channel. This companion remains beta source with build instructions; the npm package does not contain `companions/` or install the app, and no signed Mac installer is supplied. Signing and HomeKit access must be configured on the intended Mac.
+Use the companion source from [plugin tag v2.8.0](https://github.com/linanw/tuya-homebridge/tree/v2.8.0/companions/mac), with the [2.8.0 server setup](https://github.com/linanw/tuya-homebridge/blob/v2.8.0/docs/metadata-sync/SETUP.md). The plugin is published through npm's stable `latest` channel. This companion remains beta source with build instructions; the npm package does not contain `companions/` or install the app, and no signed Mac installer is supplied. Signing and HomeKit access must be configured on the intended Mac.
 
-从 GitHub 标签 `v2.7.0` 获取伴侣源码。插件 2.7.0 使用正式 `latest` 通道；Mac 伴侣仍为 beta 源码和构建步骤，未提供已签名安装包。npm 包不包含 `companions/`，安装插件不会安装此 App。
+从 GitHub 标签 `v2.8.0` 获取伴侣源码。插件 2.8.0 使用正式 `latest` 通道；Mac 伴侣仍为 beta 源码和构建步骤，未提供已签名安装包。npm 包不包含 `companions/`，安装插件不会安装此 App。
 
 ## Build and run / 构建运行
 

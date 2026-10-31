@@ -1,5 +1,5 @@
 const assert = require('node:assert/strict');
-const { test } = require('node:test');
+const { test, before, after } = require('node:test');
 const { mkdtemp, rm } = require('node:fs/promises');
 const { tmpdir } = require('node:os');
 const path = require('node:path');
@@ -10,6 +10,14 @@ const homebridgeDist = path.dirname(require.resolve('homebridge'));
 const { HomebridgeAPI } = require(path.join(homebridgeDist, 'api.js'));
 const { User } = require(path.join(homebridgeDist, 'user.js'));
 const pluginName = require('../package.json').name;
+let homebridgeStorage;
+before(async () => {
+  homebridgeStorage = await mkdtemp(path.join(tmpdir(), 'tuya-homebridge-test-'));
+  User.setStoragePath(homebridgeStorage);
+});
+after(async () => {
+  await rm(homebridgeStorage, { recursive: true, force: true });
+});
 
 function createPlatform(api) {
   let Platform;
@@ -61,11 +69,164 @@ test('HomeKit still controls Tuya devices when the Matter API is absent', async 
   await platform.onMQTTMessage({ devId: 'homekit-only', bizCode: 'delete' });
   assert.equal(platform.accessories.size, 0);
   assert.equal(platform.deviceAccessories.size, 0);
+  await platform.addAccessory({ id: 'homekit-presence', name: 'Presence', category: 'hps', status: [
+    { code: 'presence_state', value: 'none' },
+  ] });
+  const presence = platform.accessories.get(api.hap.uuid.generate('homekit-presence'));
+  assert.ok(presence.getService(api.hap.Service.OccupancySensor));
+  assert.equal(presence.getService(api.hap.Service.MotionSensor), undefined);
+  await platform.onMQTTMessage({ devId: 'homekit-presence', status: [{ code: 'presence_state', value: 'peaceful' }] });
+  assert.equal(await presence.getService(api.hap.Service.OccupancySensor)
+    .getCharacteristic(api.hap.Characteristic.OccupancyDetected).handleGetRequest(), 1);
+  assert.equal(commands.length, 1, 'read-only presence reports must not issue a Tuya command');
+});
+
+test('native occupancy reports valid presence and repairs restored detector features without losing identity', { timeout: 30000 }, async t => {
+  const storage = await mkdtemp(path.join(homebridgeStorage, 'presence-'));
+  const { MatterServer } = require(path.join(homebridgeDist, 'matter/server.js'));
+  const config = {
+    uniqueId: 'tuya-presence-test', storagePath: path.join(storage, 'matter'),
+    displayName: 'Tuya presence test', port: 15541, deferOnline: true, networkInterfaces: ['lo'],
+  };
+  let server = new MatterServer(config);
+  const api = new HomebridgeAPI();
+  await api.loadMatterAPI();
+  api._matterServer = server;
+  api._matterManager = {
+    hasActiveMatter: () => true, isBridgeServerStarting: () => false, getExternalServer: () => undefined,
+  };
+  const pending = new Set();
+  const nativeFailures = [];
+  const track = operation => {
+    pending.add(operation);
+    operation.then(() => pending.delete(operation), error => {
+      nativeFailures.push(error);
+      pending.delete(operation);
+    });
+  };
+  const drain = async () => {
+    while (pending.size) await Promise.allSettled(Array.from(pending));
+  };
+  api.on('registerMatterPlatformAccessories', (...args) => track(server.registerPlatformAccessories(...args)));
+  api.on('unregisterMatterPlatformAccessories', (...args) => track(server.unregisterPlatformAccessories(...args)));
+  api.on('updateMatterAccessoryState', (...args) => track(server.updateAccessoryState(...args)));
+  const first = createPlatform(api);
+  let restored;
+  t.after(async () => {
+    await first.platform.matterBridge.close();
+    if (restored) await restored.platform.matterBridge.close();
+    await drain();
+    await server.stop();
+    await rm(storage, { recursive: true, force: true });
+  });
+  await server.start();
+  const device = { id: 'presence', name: 'Human presence', category: 'hps', status: [] };
+  await first.platform.addAccessory(device);
+  await drain();
+  assert.equal(server.getAccessories().length, 0, 'missing presence is unknown, not vacant');
+  assert.equal(first.platform.accessories.get(api.hap.uuid.generate('presence'))
+    .getService(api.hap.Service.OccupancySensor), undefined, 'unconfirmed HAP occupancy must also remain unpublished');
+  const observe = (platform, value) => platform.onMQTTMessage({ devId: 'presence', status: [
+    { code: 'presence_state', value },
+  ] });
+  await observe(first.platform, 'none');
+  await drain();
+  assert.equal(server.getAccessories().length, 1);
+  const descriptor = server.getAccessories()[0];
+  const uuid = descriptor.UUID;
+  const native = server.accessories.get(uuid).endpoint;
+  const endpointNumber = native.number;
+  const state = () => server.getAccessoryState(uuid, 'occupancySensing');
+  assert.equal(descriptor.deviceType.deviceType, 0x0107);
+  assert.equal(state().featureMap.other, true);
+  assert.equal(state().featureMap.passiveInfrared, false);
+  assert.equal(state().featureMap.occupancyEvent, true);
+  assert.equal(state().occupancySensorType, 0);
+  assert.equal(state().occupancySensorTypeBitmap.pir, false);
+  assert.equal(state().occupancySensorTypeBitmap.ultrasonic, false);
+  assert.equal(state().occupancySensorTypeBitmap.physicalContact, false);
+  assert.equal(server.getAccessoryState(uuid, 'booleanState'), undefined);
+  assert.deepEqual(Object.keys(descriptor.handlers), []);
+  assert.equal(state().occupancy.occupied, false);
+  const events = [];
+  native.events.occupancySensing.occupancyChanged.on(event => events.push(event.occupancy.occupied));
+  await observe(first.platform, 'peaceful');
+  await observe(first.platform, 'small_move');
+  await observe(first.platform, 'large_move');
+  await observe(first.platform, 'unrecognized');
+  const hap = first.platform.accessories.get(api.hap.uuid.generate('presence'));
+  const presenceService = hap.getService(api.hap.Service.OccupancySensor);
+  assert.equal(await presenceService.getCharacteristic(api.hap.Characteristic.OccupancyDetected).handleGetRequest(), 1,
+    'HomeKit serialization must keep the last occupancy rather than replace an errored getter with default vacant');
+  assert.equal(presenceService.getCharacteristic(api.hap.Characteristic.StatusFault).value,
+    api.hap.Characteristic.StatusFault.GENERAL_FAULT);
+  assert.equal(presenceService.getCharacteristic(api.hap.Characteristic.StatusActive).value, false);
+  assert.equal(hap.controller.hasValidCache(), false);
+  await first.platform.matterBridge.reconcileAccessories(first.platform.accessories.values());
+  await drain();
+  assert.equal(state().occupancy.occupied, true, 'unknown readings retain the last confirmed native occupancy');
+  assert.equal(server.accessories.get(uuid).endpoint, native, 'unknown readings must not prune a valid endpoint');
+  assert.deepEqual(events, [true], 'still/moving occupants and unknown readings must not emit false vacancy');
+  await observe(first.platform, 'none');
+  await drain();
+  assert.equal(state().occupancy.occupied, false);
+  assert.equal(await presenceService.getCharacteristic(api.hap.Characteristic.OccupancyDetected).handleGetRequest(), 0);
+  assert.equal(presenceService.getCharacteristic(api.hap.Characteristic.StatusFault).value,
+    api.hap.Characteristic.StatusFault.NO_FAULT);
+  assert.equal(presenceService.getCharacteristic(api.hap.Characteristic.StatusActive).value, true);
+  assert.deepEqual(events, [true, false]);
+  assert.deepEqual(first.commands, []);
+  assert.deepEqual(first.errors, []);
+  assert.deepEqual(nativeFailures, []);
+  const pairingCode = server.getCommissioningInfo().manualPairingCode;
+  const uniqueId = server.getAccessoryState(uuid, 'bridgedDeviceBasicInformation').uniqueId;
+  await first.platform.matterBridge.close();
+  await drain();
+  await server.accessoryCache.save(server.accessories);
+  await server.stop();
+  server = new MatterServer(config);
+  api._matterServer = server;
+  await server.start();
+  assert.equal(server.accessories.get(uuid).endpoint.number, endpointNumber);
+  if (typeof uniqueId === 'string' && uniqueId) {
+    assert.equal(server.getAccessoryState(uuid, 'bridgedDeviceBasicInformation').uniqueId, uniqueId,
+      'native persistence must retain the observed identity before plugin feature repair');
+  }
+  assert.equal(state().featureMap.passiveInfrared, true,
+    'the actual Homebridge 2.4 disk cache must reproduce its default PIR restoration');
+  restored = createPlatform(api);
+  for (const cached of server.getAccessories()) restored.platform.configureMatterAccessory(cached);
+  const incorrectlyRestoredEndpoint = server.accessories.get(uuid).endpoint;
+  await restored.platform.addAccessory(device);
+  assert.equal(restored.platform.accessories.get(api.hap.uuid.generate('presence'))
+    .getService(api.hap.Service.OccupancySensor), undefined);
+  await restored.platform.matterBridge.reconcileAccessories(restored.platform.accessories.values());
+  assert.equal(server.accessories.get(uuid).endpoint, incorrectlyRestoredEndpoint,
+    'an unknown source must defer feature migration and preserve the cached endpoint');
+  await observe(restored.platform, 'presence');
+  await drain();
+  assert.equal(server.getAccessories().length, 1);
+  assert.equal(server.getAccessories()[0].UUID, uuid);
+  assert.equal(server.accessories.get(uuid).endpoint.number, endpointNumber);
+  assert.equal(server.getCommissioningInfo().manualPairingCode, pairingCode);
+  if (typeof uniqueId === 'string' && uniqueId) {
+    assert.equal(server.getAccessoryState(uuid, 'bridgedDeviceBasicInformation').uniqueId, uniqueId);
+  }
+  assert.equal(state().featureMap.other, true);
+  assert.equal(state().featureMap.passiveInfrared, false);
+  assert.equal(state().occupancySensorTypeBitmap.pir, false);
+  assert.equal(state().occupancy.occupied, true);
+  const repaired = server.accessories.get(uuid).endpoint;
+  await observe(restored.platform, 'peaceful');
+  await drain();
+  assert.equal(server.accessories.get(uuid).endpoint, repaired, 'normal observations must not rebuild the endpoint');
+  assert.deepEqual(restored.commands, []);
+  assert.deepEqual(restored.errors, []);
+  assert.deepEqual(nativeFailures, []);
 });
 
 test('native Matter endpoints control Tuya drivers and receive MQTT state', { timeout: 30000 }, async t => {
-  const storage = await mkdtemp(path.join(tmpdir(), 'tuya-matter-test-'));
-  User.setStoragePath(storage);
+  const storage = await mkdtemp(path.join(homebridgeStorage, 'matter-'));
   const { MatterServer } = require(path.join(homebridgeDist, 'matter/server.js'));
   const serverConfig = {
     uniqueId: 'tuya-integration-test',

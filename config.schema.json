@@ -204,10 +204,11 @@
                   "enum": [
                     "AirPurifier", "Light", "Outlet", "Switch", "Fanv2",
                     "SmokeSensor", "Heater", "GarageDoor", "WindowCovering",
-                    "ContactSensor", "LeakSensor", "WirelessSwitch", "Door",
+                    "ContactSensor", "HumanPresenceSensor", "OccupancySensor",
+                    "LeakSensor", "WirelessSwitch", "Door",
                     "kj", "dj", "dd", "fwd", "tgq", "xdd", "dc", "tgkg",
                     "cz", "pc", "kg", "tdq", "fs", "fskg", "ywbj", "qn",
-                    "ckmkzq", "cl", "mcs", "rqbj", "jwbj", "wxkg"
+                    "ckmkzq", "cl", "mcs", "hps", "rqbj", "jwbj", "wxkg"
                   ],
                   "required": true
                 }

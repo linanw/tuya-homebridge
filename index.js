@@ -12,6 +12,7 @@ const AirPurifierAccessory = require("./lib/air_purifier_accessory");
 const WindowCoveringAccessory = require("./lib/window_covering_accessory");
 const DoorAccessory = require("./lib/door_accessory");
 const ContactSensorAccessory = require("./lib/contactsensor_accessory");
+const PresenceSensorAccessory = require("./lib/presence_sensor_accessory");
 const WirelessSwitchAccessory = require("./lib/wirelessswitch_accessory");
 const LeakSensorAccessory = require("./lib/leak_sensor_accessory");
 const MatterBridge = require("./lib/matter_bridge");
@@ -335,6 +336,17 @@ class TuyaPlatform {
         this.accessories.set(uuid, deviceAccessory.homebridgeAccessory);
         this.deviceAccessories.set(uuid, deviceAccessory);
         break;
+      case "hps":
+      case "HumanPresenceSensor":
+      case "OccupancySensor":
+        deviceAccessory = new PresenceSensorAccessory(
+          this,
+          homebridgeAccessory,
+          device
+        );
+        this.accessories.set(uuid, deviceAccessory.homebridgeAccessory);
+        this.deviceAccessories.set(uuid, deviceAccessory);
+        break;
       case "rqbj":
       case "jwbj":
       case "LeakSensor":
@@ -447,11 +459,13 @@ class TuyaPlatform {
   async removeAccessory(accessory) {
     if (accessory) {
       this.log.log(`Remove Accessory ${accessory}`);
-      this.api.unregisterPlatformAccessories(
-        PLUGIN_NAME,
-        "TuyaPlatform",
-        [accessory]
-      );
+      if (!accessory.controller?.registrationPending) {
+        this.api.unregisterPlatformAccessories(
+          PLUGIN_NAME,
+          "TuyaPlatform",
+          [accessory]
+        );
+      }
       this.accessories.delete(accessory.UUID);
       this.deviceAccessories.delete(accessory.UUID);
       await this.matterBridge.removeAccessory(accessory);
